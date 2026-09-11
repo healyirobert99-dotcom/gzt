@@ -63,6 +63,32 @@
   CreateProcess 拒绝，且失败时 stdout 为空、**极易被误判成断言通过**。
 - Python 读 CRLF 文本若不加 `newline=''`，universal newlines 会折掉 `\r`，
   `text.index(':label\r\n')` 会抛 `ValueError`。
+- **MSYS2 版 ssh（`/usr/bin/ssh`）在中文用户名 HOME 下彻底不可用**：它把
+  `HOME=/c/Users/宜春法院` 按本地 ANSI(GBK) 处理，去找
+  `/c/Users/\322\313\264\272\267\250\324\272/.ssh/known_hosts`，于是**既读不到
+  `known_hosts`，也读不到 `~/.ssh/config`**，报 `Host key verification failed`
+  —— 伪装成"主机密钥问题"，极易误诊为密钥没配对。
+  **git 必须改用 Windows 原生 ssh**：
+  `git config core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"`。
+  自检：`<ssh> -G github.com | grep '^user'` 应输出 `user git`
+  （MSYS2 版会输出 `user 宜春法院`，即 config 根本没被读）。
+
+## Git 版本管理与远程仓库（2026-09-11 建立）
+
+- 仓库：`git@github.com:healyirobert99-dotcom/gzt.git`，**公开仓库**，默认分支 `main`
+- git 身份（`--local`）：`healyirobert99-dotcom` /
+  `healyirobert99-dotcom@users.noreply.github.com`
+- 已设 `core.autocrlf=false`（保证入库字节与工作区逐字节一致）、`core.quotepath=false`
+  （中文文件名不转义）、`core.sshCommand` 见上一节的坑。
+- 密钥：`~/.ssh/id_ed25519_gzt`（项目专用）；`~/.ssh/config` 内 `IdentityFile` +
+  `IdentitiesOnly yes`。**公钥需用户在 GitHub 账号侧添加后才可推送。**
+- **内容策略由用户明确拍板为"完整留档"**：源码、测试、样例、审计材料、
+  **真实数据库快照**（含 7 只标的的研究结论与交易计划）、历史归档
+  （`archive/` `audit_pack_src/` `pack_v106_src/` `.tmp_v108x/`）**全部入库**。
+  `.gitignore` 只排 `__pycache__/`、`*.py[cod]`、根目录 0 字节 `workbench.db`
+  与系统 / 编辑器垃圾。
+- **风险已当面告知**：仓库公开，上述数据对互联网可见；日后若要转私有或撤下，
+  必须提醒"可能已被 fork / 缓存，删除不等于消失"。
 
 ## 启动器约定（`启动工作台.bat`，2026-09-11 重写）
 
