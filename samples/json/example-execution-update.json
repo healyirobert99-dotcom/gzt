@@ -1,0 +1,19 @@
+{
+  "_notice": "格式演示数据（明显虚构的演示标的），仅用于演示 ah-workbench-execution 的字段结构，请勿写入正式库。前提：该标的必须已通过「导入研究结果」进入工作台。",
+  "format": "ah-workbench-execution",
+  "format_version": "1.0",
+  "identity": {
+    "exchange": "HK",
+    "code": "90001"
+  },
+  "execution": {
+    "execution_date": "2026-09-11",
+    "price_snapshot": 11.15,
+    "support_zone": "10.80-11.00",
+    "resistance_zone": "11.80-12.00",
+    "technical_structure": "演示用技术结构描述（虚构）",
+    "execution_condition": "演示用观察条件（虚构）",
+    "execution_view": "等待技术确认",
+    "reason": "演示用依据说明（虚构）"
+  }
+}

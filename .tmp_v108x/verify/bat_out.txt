@@ -1,0 +1,11 @@
+
+  ==============================================
+    A/H Workbench
+  ==============================================
+
+  Python  : "C:\Users\“À¥∫∑®‘∫\.workbuddy\binaries\python\versions\3.13.12\python.exe"
+  Address : http://127.0.0.1:8765
+
+  The browser opens automatically. Keep this window open;
+  close it or press Ctrl+C to stop the server.
+

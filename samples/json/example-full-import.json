@@ -1,0 +1,79 @@
+{
+  "_notice": "格式演示数据（明显虚构的演示标的），仅用于演示 ah-workbench-import 的字段结构，请勿写入正式库。上架前请替换为真实深穿结论。",
+  "format": "ah-workbench-import",
+  "format_version": "1.0",
+  "generated_at": "2026-09-11",
+  "securities": [
+    {
+      "identity": {
+        "exchange": "HK",
+        "code": "90001",
+        "name": "演示标的A（虚构）",
+        "sector": "演示"
+      },
+      "status": "等价格",
+      "research": {
+        "research_pool": "演示池",
+        "one_liner": "演示用一句话逻辑：示例业务持续增长（虚构，非真实研究）",
+        "positive_changes": "演示用正面变化说明",
+        "core_validations": [
+          {"content": "演示验证项一：示例指标同比 ≥ 20%（虚构）", "status": "跟踪中"},
+          {"content": "演示验证项二：示例指标连续两季改善（虚构）", "status": "已验证"}
+        ],
+        "wall_conditions": [
+          {"content": "演示危墙条件：示例指标连续两季下滑（虚构）", "triggered": false}
+        ],
+        "report_link": "",
+        "research_date": "2026-09-11",
+        "change_note": "格式演示（首次深穿）"
+      },
+      "trade_plan": {
+        "first_zone_low": 10.0, "first_zone_high": 11.0,
+        "add_zone_low": 9.0, "add_zone_high": 9.5,
+        "odds_zone_low": 8.0, "odds_zone_high": 8.5,
+        "no_chase_price": 12.0,
+        "target_position_pct": 5.0,
+        "next_action": "演示用下一动作（等待首仓区）",
+        "change_note": "格式演示（初始计划）"
+      },
+      "execution": {
+        "execution_date": "2026-09-11",
+        "price_snapshot": 11.2,
+        "support_zone": "10.8-11.0",
+        "resistance_zone": "11.8-12.0",
+        "technical_structure": "演示用技术结构描述（虚构）",
+        "execution_condition": "演示用观察条件（虚构）",
+        "execution_view": "等待技术确认",
+        "reason": "演示用依据说明（虚构）"
+      }
+    },
+    {
+      "identity": {
+        "exchange": "SH",
+        "code": "900001",
+        "name": "演示标的B（虚构）"
+      },
+      "status": "等证据",
+      "research": {
+        "research_pool": "",
+        "one_liner": "演示用一句话逻辑 B（虚构，仅演示最小 research 结构）",
+        "core_validations": [
+          {"content": "演示验证项：示例证据待补充（虚构）", "status": "跟踪中"}
+        ],
+        "wall_conditions": [
+          {"content": "演示危墙条件：示例假设被推翻（虚构）", "triggered": false}
+        ],
+        "change_note": "格式演示（首建）"
+      },
+      "trade_plan": {
+        "first_zone_low": 20.0, "first_zone_high": 22.0,
+        "add_zone_low": 19.0, "add_zone_high": 19.5,
+        "odds_zone_low": 18.0, "odds_zone_high": 18.5,
+        "no_chase_price": 24.0,
+        "target_position_pct": 4.0,
+        "next_action": "演示用下一动作（观望）",
+        "change_note": "格式演示（初始计划）"
+      }
+    }
+  ]
+}

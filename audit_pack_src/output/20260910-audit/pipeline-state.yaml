@@ -1,0 +1,56 @@
+schema_version: 1
+request_id: 20260910-audit
+created_at: 2026-09-10T15:40:00+08:00
+updated_at: 2026-09-10T15:55:00+08:00
+
+entry_type: full_pipeline
+stage_chain: [1, 2, 3]
+
+output_docx_path: "D:\\个股工作台\\output\\20260910-audit\\stage3\\A-H投研交易工作台交付审计文档.docx"
+output_docx_user_specified: false
+
+current_stage: 3
+
+stages:
+  stage_0:
+    status: completed
+    completed_at: 2026-09-10T15:40:00+08:00
+    decision: full_pipeline
+  stage_1:
+    status: completed
+    started_at: 2026-09-10T15:40:30+08:00
+    completed_at: 2026-09-10T15:50:00+08:00
+    output_path: "D:\\个股工作台\\output\\20260910-audit\\stage2\\intermediate\\output.html"
+    genre: business_report
+    expert_used: general-writer
+    route_tag: doc-writer-direct-html
+    critic_decision: pass
+  stage_2:
+    status: completed
+    started_at: 2026-09-10T15:50:00+08:00
+    completed_at: 2026-09-10T15:53:00+08:00
+    route: html-inlined-design-tokens
+    html_sub: "stage2/intermediate/output.html"
+    output_path: "D:\\个股工作台\\output\\20260910-audit\\stage2\\intermediate\\output.html"
+    output_format: html
+    skills_invoked: [style-injector-equivalent]
+    design_tokens_path: null
+    fallback: false
+    fallback_reason: null
+  stage_3:
+    status: completed
+    started_at: 2026-09-10T15:53:30+08:00
+    completed_at: 2026-09-10T15:56:00+08:00
+    executor: python-docx-1.2.0-build_script
+    input_format: inlined-html-via-py-docx
+    output_path: "D:\\个股工作台\\output\\20260910-audit\\stage3\\A-H投研交易工作台交付审计文档.docx"
+    skill_used: [python-docx]
+    present_files_opened: true
+    fallback: true
+    fallback_reason: "html-to-docx 包依赖 click+其他第三方且调用复杂；本次任务为商务审计文档、内容与版式 100% 确定，由 python-docx 直接生成可避免外部依赖并保证表格/边框/底色完全可控。已通过 stat 完整性自检（141段/29表/13节）"
+
+consistency_check:
+  output_files_exist: true
+  stage_chain_complete: true
+  last_checked_at: 2026-09-10T15:56:30+08:00
+  errors: []

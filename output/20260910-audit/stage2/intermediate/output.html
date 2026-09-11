@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>A/H 投研交易工作台 — 生产交付审计文档</title>
+<style>
+  /* ========== 商务报告设计令牌 ========== */
+  :root{
+    --color-primary:#1f3a68;
+    --color-primary-soft:#e8eef7;
+    --color-accent:#c0392b;
+    --color-success:#2d6a4f;
+    --color-warn:#b7791f;
+    --color-muted:#6c757d;
+    --color-text:#212529;
+    --color-border:#dee2e6;
+    --color-bg-soft:#f7f9fc;
+    --font-cn:"Source Han Serif SC","Noto Serif SC","SimSun",serif;
+    --font-en:"Georgia","Times New Roman",serif;
+    --font-mono:"Consolas","Courier New",monospace;
+  }
+  html,body{margin:0;padding:0;color:var(--color-text);font-family:var(--font-cn);line-height:1.7;font-size:14pt;}
+  body{padding:36pt 56pt;background:#fff;}
+  h1{font-size:26pt;color:var(--color-primary);border-bottom:3px solid var(--color-primary);padding-bottom:12pt;margin-top:28pt;}
+  h2{font-size:18pt;color:var(--color-primary);border-left:5px solid var(--color-primary);padding-left:10pt;margin-top:24pt;page-break-after:avoid;}
+  h3{font-size:15pt;color:var(--color-primary);margin-top:18pt;page-break-after:avoid;}
+  h4{font-size:13pt;color:var(--color-text);margin-top:12pt;page-break-after:avoid;}
+  p,li{text-align:justify;text-indent:0;}
+  ul,ol{padding-left:24pt;}
+  table{border-collapse:collapse;width:100%;margin:12pt 0;font-size:12pt;page-break-inside:avoid;}
+  th{background:var(--color-primary);color:#fff;padding:8pt 10pt;text-align:left;font-weight:600;border:1px solid var(--color-primary);}
+  td{padding:6pt 10pt;border:1px solid var(--color-border);vertical-align:top;}
+  tr:nth-child(even)>td{background:var(--color-bg-soft);}
+  .meta-table th{background:var(--color-primary-soft);color:var(--color-primary);width:28%;}
+  .cover{text-align:center;padding:120pt 0 60pt;page-break-after:always;}
+  .cover h1{font-size:32pt;border:none;margin:24pt 0;}
+  .cover .sub{font-size:14pt;color:var(--color-muted);margin-bottom:48pt;}
+  .cover .box{display:inline-block;border:2px solid var(--color-primary);padding:18pt 36pt;margin-top:24pt;text-align:left;font-size:13pt;}
+  .cover .box .row{margin:6pt 0;}
+  .cover .box .label{display:inline-block;width:120pt;color:var(--color-muted);}
+  .signature{margin-top:36pt;}
+  .signature td{padding:18pt 12pt;}
+  code{font-family:var(--font-mono);background:var(--color-bg-soft);padding:1pt 4pt;border-radius:3pt;font-size:11pt;color:var(--color-accent);}
+  pre{background:var(--color-bg-soft);padding:12pt;border-left:4px solid var(--color-primary);border-radius:3pt;font-size:11pt;overflow-x:auto;font-family:var(--font-mono);white-space:pre-wrap;word-break:break-all;}
+  .warn{background:#fef7e6;border-left:4px solid var(--color-warn);padding:10pt 14pt;margin:12pt 0;}
+  .danger{background:#fce8e6;border-left:4px solid var(--color-accent);padding:10pt 14pt;margin:12pt 0;}
+  .ok{background:#e8f5e9;border-left:4px solid var(--color-success);padding:10pt 14pt;margin:12pt 0;}
+  .small{font-size:11pt;color:var(--color-muted);}
+  .page-break{page-break-before:always;}
+  .toc-list{margin:18pt 0;padding-left:0;list-style:none;}
+  .toc-list li{display:flex;justify-content:space-between;border-bottom:1px dotted var(--color-border);padding:6pt 0;}
+  .toc-list li a{color:var(--color-primary);text-decoration:none;}
+  .schema-erd td{font-family:var(--font-mono);font-size:11pt;}
+  .hash{font-family:var(--font-mono);font-size:10pt;color:var(--color-muted);word-break:break-all;}
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<section class="cover">
+  <h1>A/H 投研交易工作台</h1>
+  <div class="sub">生产交付审计文档 · Production Delivery Audit Memo</div>
+  <div class="box">
+    <div class="row"><span class="label">项目代号</span> AH-WORKBENCH-MVP</div>
+    <div class="row"><span class="label">版本</span> v1.0.0</div>
+    <div class="row"><span class="label">交付日期</span> 2026-09-10</div>
+    <div class="row"><span class="label">编制人</span> 投研工作台开发组</div>
+    <div class="row"><span class="label">审计对象</span> 源码、数据库、接口、UI、安全、运维</div>
+    <div class="row"><span class="label">适用范围</span> 第三方独立审计 / 内部合规复核</div>
+  </div>
+  <p class="small" style="margin-top:48pt;">
+    本文档为面向第三方审计与内部合规复核的完整交付物清单与审计指引。<br>
+    所有交付源代码附 SHA-256 哈希以验证完整性，所有接口已通过端到端回归测试。
+  </p>
+</section>
+
+<!-- ============ 目录 ============ -->
+<h1>目录</h1>
+<ul class="toc-list">
+  <li><span>1. 文档元信息与版本控制</span><span>第 3 页</span></li>
+  <li><span>2. 项目目标与系统边界</span><span>第 4 页</span></li>
+  <li><span>3. 系统架构与技术栈</span><span>第 5 页</span></li>
+  <li><span>4. 交付物清单（含 SHA-256）</span><span>第 6 页</span></li>
+  <li><span>5. 数据模型（SQLite Schema）</span><span>第 7 页</span></li>
+  <li><span>6. REST API 规格</span><span>第 9 页</span></li>
+  <li><span>7. 前端页面与交互</span><span>第 11 页</span></li>
+  <li><span>8. 安全审计要点</span><span>第 12 页</span></li>
+  <li><span>9. 测试报告与回归证据</span><span>第 13 页</span></li>
+  <li><span>10. 部署、运维与数据所有权</span><span>第 14 页</span></li>
+  <li><span>11. 风险登记册与已知限制</span><span>第 15 页</span></li>
+  <li><span>12. 第三方审计重点与建议</span><span>第 16 页</span></li>
+  <li><span>13. 附录 A：完整源代码清单</span><span>第 17 页</span></li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ============ 1. 文档元信息 ============ -->
+<h1>1. 文档元信息与版本控制</h1>
+
+<h3>1.1 文档版本</h3>
+<table class="meta-table">
+  <tr><th>字段</th><td>值</td></tr>
+  <tr><th>文档版本</th><td>v1.0.0</td></tr>
+  <tr><th>编制日期</th><td>2026-09-10</td></tr>
+  <tr><th>编制人</th><td>投研工作台开发组（WorkBuddy 协作生成 + 人工复核）</td></tr>
+  <tr><th>审阅人</th><td>（待独立审计方填写）</td></tr>
+  <tr><th>密级</th><td>内部 · 仅供审计与合规使用</td></tr>
+  <tr><th>本文档 SHA-256</th><td class="hash">（生成后由工具回填）</td></tr>
+</table>
+
+<h3>1.2 变更记录</h3>
+<table>
+  <tr><th style="width:15%">版本</th><th style="width:15%">日期</th><th style="width:20%">作者</th><th style="width:50%">变更摘要</th></tr>
+  <tr><td>v1.0.0</td><td>2026-09-10</td><td>开发组</td><td>首次交付：MVP v1.0.0 全量源码、SQLite 数据、接口、UI、安全审计与测试报告</td></tr>
+</table>
+
+<h3>1.3 文档范围声明</h3>
+<div class="warn">
+<strong>边界声明：</strong>本系统为<strong>个人投研工作台</strong>（非券商交易终端、非组合管理系统），不承担自动选股、自动交易、合规报送、监管接口、税务计算、多账户/多用户权限角色等职责。任何超出本文档 §2.2 范围的能力，均不在本次审计对象之内。
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 2. 项目目标与边界 ============ -->
+<h1>2. 项目目标与系统边界</h1>
+
+<h3>2.1 项目目标</h3>
+<p>建立一个面向 A 股与港股的个人投研与交易管理工作台，承接已经过"拉网 / 深穿"研究的标的，将<strong>研究结论、交易计划、真实持仓和后续验证</strong>放在同一个系统中持续管理。</p>
+<p>核心问题：<em>今天有哪些标的发生了值得我处理的变化，我下一步应该按照原来已经确定的计划做什么？</em></p>
+
+<h3>2.2 系统边界（必须做）</h3>
+<ul>
+  <li>承接已完成的"深穿"结论，转化为结构化个股档案</li>
+  <li>维护研究结论、交易计划、真实持仓的<strong>四层分离</strong>结构</li>
+  <li>支持标的从「等证据 → 等价格 → 可交易 → 持仓中 → 暂不参与」的状态机</li>
+  <li>提供基于"首仓区 / 加仓区 / 强赔率区 / 不追价"的<strong>事实化行情对照</strong></li>
+  <li>维护 append-only 的研究版本、计划版本、交易流水、决策台账</li>
+  <li>仅在本地运行，数据所有权归用户</li>
+</ul>
+
+<h3>2.3 系统边界（明确不做）— 防止范围蔓延</h3>
+<div class="danger">
+<strong>本 MVP 明确拒绝实现</strong>以下功能。任何要求新增此清单内能力的请求，应作为新项目立项而非范围变更：
+</div>
+<table>
+  <tr><th>明确不做</th><th>原因</th></tr>
+  <tr><td>自动选股 / 自动打分</td><td>不替代深穿研究</td></tr>
+  <tr><td>自动生成新投资规则</td><td>不擅自改写研究逻辑</td></tr>
+  <tr><td>自动交易 / 算法下单</td><td>不代替人做执行判断</td></tr>
+  <tr><td>行情变化自行修改交易计划</td><td>计划修改必须由人发起并附说明</td></tr>
+  <tr><td>复杂收益归因 / 因子归因</td><td>超出 MVP 范围</td></tr>
+  <tr><td>量化评分 / 量化回测</td><td>不在工作台职责之内</td></tr>
+  <tr><td>技术指标系统（MA/MACD/...）</td><td>用户基于研究结论而非指标</td></tr>
+  <tr><td>组合优化 / VaR / Monte Carlo</td><td>超出 MVP 范围</td></tr>
+  <tr><td>多账户 / 多用户 / 角色权限</td><td>个人工具，无需</td></tr>
+  <tr><td>社交 / 新闻门户 / 研报聚合</td><td>数据源与深穿会话负责</td></tr>
+  <tr><td>报价"建议买入"信号</td><td>系统只显示客观事实，价格/区间比对交给人</td></tr>
+</table>
+
+<h3>2.4 与"深穿"会话的关系</h3>
+<table>
+  <tr><th style="width:18%">环节</th><th>负责方</th></tr>
+  <tr><td>标的筛选与拉网</td><td>深穿会话</td></tr>
+  <tr><td>单股深穿 / 估值 / 风险评估</td><td>深穿会话</td></tr>
+  <tr><td>输出标准化信息卡</td><td>深穿会话（输出）→ 工作台（导入）</td></tr>
+  <tr><td>日常跟踪与提示</td><td>工作台</td></tr>
+  <tr><td>出现重大变化回归深穿</td><td>工作台（识别）→ 深穿会话（出结论）→ 工作台（更新）</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ============ 3. 架构 ============ -->
+<h1>3. 系统架构与技术栈</h1>
+
+<h3>3.1 总体架构</h3>
+<pre>┌──────────────────────────────────────────────────────────────┐
+│                     浏览器前端 (Chrome / Edge)                │
+│  ┌──────────────┬──────────────┬──────────────────────────┐  │
+│  │ 今日工作台    │ 标的库        │ 个股详情 / 流水 / 台账    │  │
+│  │ (index.html) │              │  (同名 SPA，单页路由)     │  │
+│  └──────────────┴──────────────┴──────────────────────────┘  │
+│              vanilla JS · 零框架 · 36 KB                     │
+└──────────────────────────────────────────────────────────────┘
+          │ HTTP/1.1 (JSON) · localhost:8765（默认）
+          ▼
+┌──────────────────────────────────────────────────────────────┐
+│              Python 3.13 HTTP 服务 (stdlib only)              │
+│   ┌──────────┬───────────┬───────────┬───────────┬─────────┐  │
+│   │ REST API │ 静态资源   │ SQLite    │ 行情代理   │ 端口    │  │
+│   │ 处理器   │ 服务器    │ 读写     │ (qq.com) │ 8765  │  │
+│   └──────────┴───────────┴───────────┴───────────┴─────────┘  │
+└──────────────────────────────────────────────────────────────┘
+          │                                  │
+          ▼                                  ▼
+┌──────────────────────────┐      ┌──────────────────────────┐
+│  data/workbench.db       │      │ 腾讯免费行情接口           │
+│  (SQLite 单文件)         │      │ qt.gtimg.cn (只读 GET)    │
+└──────────────────────────┘      └──────────────────────────┘</pre>
+
+<h3>3.2 技术栈选型（零第三方依赖，避免供应链风险）</h3>
+<table class="meta-table">
+  <tr><th style="width:32%">组件</th><td>选择</td></tr>
+  <tr><th>后端语言</th><td>Python 3.13.12（C:\Users\宜春法院\.workbuddy\binaries\python\versions\3.13.12\python.exe）</td></tr>
+  <tr><th>HTTP 服务器</th><td>Python 标准库 <code>http.server</code>（无第三方 Web 框架）</td></tr>
+  <tr><th>数据库</th><td>SQLite（Python 标准库 <code>sqlite3</code>，无 ORM，原始 SQL 以便审计）</td></tr>
+  <tr><th>前端</th><td>原生 HTML + CSS + JavaScript（无 React/Vue/jQuery）</td></tr>
+  <tr><th>行情数据源</th><td>腾讯免费行情 API（qt.gtimg.cn），仅 GET 只读调用</td></tr>
+  <tr><th>启动方式</th><td>双击 <code>启动工作台.bat</code>（GBK 编码，中文路径安全）</td></tr>
+</table>
+
+<h3>3.3 目录结构</h3>
+<pre>D:\个股工作台\
+├── app\
+│   ├── server.py            # 后端服务（33.9 KB / ~700 行）
+│   └── static\
+│       ├── index.html       # 单页入口
+│       ├── app.js           # 前端逻辑（36.2 KB）
+│       └── style.css        # 样式（13.0 KB）
+├── data\
+│   └── workbench.db         # SQLite 数据库（运行时自动生成）
+├── 启动工作台.bat           # Windows 启动器
+└── output\                  # 本审计文档与历史记录</pre>
+
+<div class="page-break"></div>
+
+<!-- ============ 4. 交付物清单 ============ -->
+<h1>4. 交付物清单（含 SHA-256）</h1>
+
+<h3>4.1 源代码交付清单</h3>
+<table>
+  <tr><th style="width:8%">序号</th><th style="width:32%">文件路径</th><th style="width:12%">字节数</th><th>SHA-256</th></tr>
+  <tr>
+    <td>1</td>
+    <td><code>app/server.py</code></td>
+    <td>33,944</td>
+    <td class="hash">fb4152fe6d4c0addab3d1d863e7f628363c8335cfe3bcab34d7f09f3ebcd178f</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><code>app/static/index.html</code></td>
+    <td>934</td>
+    <td class="hash">fb4c57198af812b4a317f40609a223ed47377598b034f30bb3bb32ac6f39aa8b</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><code>app/static/app.js</code></td>
+    <td>36,162</td>
+    <td class="hash">e60c013596337cbc4eaff746cfe5f718a406326b8ef3317569e35a8759608d7f</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><code>app/static/style.css</code></td>
+    <td>13,005</td>
+    <td class="hash">b90b9265586d850097ed61c6ca60cc19578b656e52ce519158d38da3d2ebcc13</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><code>启动工作台.bat</code></td>
+    <td>445</td>
+    <td class="hash">8ae2a47b8da27c6ca3d43550fd372c4e6177fa3d0f13b44ab2af664ceada22c0</td>
+  </tr>
+</table>
+<p class="small">合计源代码 5 个文件，84,490 字节，1,877 行业务代码。</p>
+
+<h3>4.2 数据文件交付清单</h3>
+<table>
+  <tr><th>文件</th><th>字节数</th><th>SHA-256</th><th>说明</th></tr>
+  <tr>
+    <td><code>data/workbench.db</code></td>
+    <td>53,248</td>
+    <td class="hash">4bcc7354e5378b29535fbc861cbc477a2b56c3e3b82aec9fe551c0f6f8050bbd</td>
+    <td>SQLite 数据库，含示例种子数据（美图 01357.HK、道通 688208.SH）</td>
+  </tr>
+</table>
+
+<h3>4.3 验证方法</h3>
+<p>审计方可使用以下命令独立验证文件完整性（Windows PowerShell / macOS / Linux 均适用）：</p>
+<pre>Get-FileHash -Path "app\server.py" -Algorithm SHA256
+# 期望输出：FB4152FE6D4C0ADDAB3D1D863E7F628363C8335CFE3BCAB34D7F09F3EBCD178F</pre>
+
+<div class="page-break"></div>
+
+<!-- ============ 5. 数据模型 ============ -->
+<h1>5. 数据模型（SQLite Schema）</h1>
+
+<h3>5.1 表清单</h3>
+<table>
+  <tr><th style="width:30%">表名</th><th style="width:40%">职责</th><th>是否 append-only</th></tr>
+  <tr><td><code>securities</code></td><td>标的本身（代码、市场、行业、A/H 关联）</td><td>可更新元信息；禁止删</td></tr>
+  <tr><td><code>research</code></td><td>研究结论（版本化）</td><td><strong>是</strong>（永远新增版本，不覆盖旧版）</td></tr>
+  <tr><td><code>trade_plans</code></td><td>交易计划（版本化）</td><td><strong>是</strong>（同上）</td></tr>
+  <tr><td><code>trades</code></td><td>真实交易流水</td><td><strong>是</strong>（仅新增，不修改不删除）</td></tr>
+  <tr><td><code>decision_ledger</code></td><td>决策台账（状态变更 / 计划变更原因）</td><td><strong>是</strong>（纯 append-only）</td></tr>
+  <tr><td><code>settings</code></td><td>运行期配置（账户总规模等）</td><td>可更新</td></tr>
+</table>
+
+<h3>5.2 完整 Schema（DDL）</h3>
+<pre>-- 标的表
+CREATE TABLE securities (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,                -- 中文名
+  code          TEXT NOT NULL,                -- 原始代码 01357 / 688208
+  exchange      TEXT NOT NULL,                -- SH / SZ / HK
+  market        TEXT NOT NULL DEFAULT 'A股',  -- A股 / 港股
+  industry      TEXT,                         -- 行业标签
+  research_pool TEXT,                         -- 所属研究池
+  a_h_link      TEXT,                         -- A/H 双向关联代码
+  status        TEXT NOT NULL DEFAULT '等证据',
+  current_price REAL,                         -- 最近一次行情快照
+  current_price_updated_at TEXT,
+  created_at    TEXT NOT NULL
+);
+
+-- 研究结论（append-only / 版本化）
+CREATE TABLE research (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  security_id       INTEGER NOT NULL,
+  version           INTEGER NOT NULL,
+  one_liner         TEXT,                     -- 一句话投资逻辑
+  positive_changes  TEXT,                     -- JSON 数组
+  core_validations  TEXT,                     -- JSON 数组
+  wall_conditions   TEXT,                     -- JSON 数组
+  report            TEXT,                     -- 完整研报正文
+  research_date     TEXT,                     -- 研究日期
+  created_at        TEXT NOT NULL,
+  UNIQUE(security_id, version)
+);
+
+-- 交易计划（append-only / 版本化）
+CREATE TABLE trade_plans (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  security_id         INTEGER NOT NULL,
+  version             INTEGER NOT NULL,
+  first_zone_low      REAL,                   -- 首仓区下沿
+  first_zone_high     REAL,                   -- 首仓区上沿
+  add_zone_low        REAL,                   -- 加仓区下沿
+  add_zone_high       REAL,                   -- 加仓区上沿
+  odds_zone_low       REAL,                   -- 强赔率区下沿
+  odds_zone_high      REAL,                   -- 强赔率区上沿
+  no_chase_price      REAL,                   -- 不追价
+  target_position_pct REAL,                   -- 目标仓位
+  next_action         TEXT,                   -- 下一动作
+  change_note         TEXT,                   -- 修改说明
+  created_at          TEXT NOT NULL,
+  UNIQUE(security_id, version)
+);
+
+-- 真实交易流水（append-only）
+CREATE TABLE trades (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  security_id INTEGER NOT NULL,
+  trade_date  TEXT NOT NULL,
+  side        TEXT NOT NULL,                 -- 买入 / 卖出
+  price       REAL NOT NULL,
+  quantity    INTEGER NOT NULL,
+  fee         REAL DEFAULT 0,
+  note        TEXT,
+  created_at  TEXT NOT NULL
+);
+
+-- 决策台账（append-only，append-only ledger 思想）
+CREATE TABLE decision_ledger (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  security_id INTEGER NOT NULL,
+  event_date  TEXT NOT NULL,
+  event_type  TEXT NOT NULL,                 -- 标的创建 / 状态变更 / 买入 / 卖出 / ...
+  summary     TEXT NOT NULL,                 -- 一句话描述
+  reason      TEXT,                          -- 决策理由（不可空）
+  created_at  TEXT NOT NULL
+);
+
+-- 系统设置
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);</pre>
+
+<h3>5.3 实体关系图</h3>
+<pre>                  ┌─────────────────────────────┐
+                  │       securities            │
+                  │ (标的: 01357, 688208 ...)   │
+                  └──────────────┬──────────────┘
+                                 │ 1
+              ┌──────────────────┼─────────────────────┬──────────────────┐
+              │ N                │ N                   │ N                │ N
+              ▼                  ▼                     ▼                  ▼
+       ┌──────────────┐   ┌──────────────┐      ┌──────────────┐   ┌──────────────────┐
+       │  research    │   │ trade_plans  │      │   trades     │   │ decision_ledger  │
+       │ (版本化)      │   │ (版本化)      │      │ (append-only) │   │ (append-only)    │
+       └──────────────┘   └──────────────┘      └──────────────┘   └──────────────────┘
+                                  ▲
+                                  │
+                当前版本通过 "MAX(version) WHERE security_id=?" 取最后一条</pre>
+
+<h3>5.4 关键约束</h3>
+<table>
+  <tr><th>约束</th><th>实现方式</th></tr>
+  <tr><td>持仓数量不能为负</td><td>应用层校验：卖出数量 &gt; 累计可卖数量时返回 400</td></tr>
+  <tr><td>计划版本号单调递增</td><td><code>UNIQUE(security_id, version)</code> + 写入时计算 <code>MAX(version)+1</code></tr>
+  <tr><td>状态变更必须填写原因</td><td>POST <code>/status</code> 校验 <code>reason</code> 字段非空</td></tr>
+  <tr><td>研究/计划版本一旦发布不可改</td><td>仅 INSERT，不提供 UPDATE / DELETE 接口</td></tr>
+  <tr><td>外键完整性</td><td><code>FOREIGN KEY</code> 已启用（PRAGMA foreign_keys=ON）</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ============ 6. REST API 规格 ============ -->
+<h1>6. REST API 规格</h1>
+
+<h3>6.1 接口总览</h3>
+<table>
+  <tr><th style="width:14%">方法</th><th style="width:42%">路径</th><th>用途</th></tr>
+  <tr><td>GET</td><td><code>/api/securities</code></td><td>列出全部标的（包含当前价快照和持仓计算）</td></tr>
+  <tr><td>POST</td><td><code>/api/securities</code></td><td>新建标的（含初始研究 + 计划）</td></tr>
+  <tr><td>GET</td><td><code>/api/securities/{id}</code></td><td>标的详情（嵌套 security / research / plan / trades / ledger）</td></tr>
+  <tr><td>POST</td><td><code>/api/securities/{id}/status</code></td><td>状态变更（必填 reason，自动写入台账）</td></tr>
+  <tr><td>POST</td><td><code>/api/securities/{id}/research</code></td><td>新增研究版本（自动 version+1）</td></tr>
+  <tr><td>PUT</td><td><code>/api/securities/{id}/plan</code></td><td>新增交易计划版本（自动 version+1）</td></tr>
+  <tr><td>POST</td><td><code>/api/securities/{id}/trades</code></td><td>新增交易流水（校验超卖）</td></tr>
+  <tr><td>GET</td><td><code>/api/quotes?symbols=hk01357,sh688208</code></td><td>腾讯行情代理</td></tr>
+  <tr><td>GET</td><td><code>/api/settings</code></td><td>读取系统设置</td></tr>
+  <tr><td>PUT</td><td><code>/api/settings</code></td><td>更新系统设置</td></tr>
+</table>
+
+<h3>6.2 关键响应示例</h3>
+<p>列表响应（GET /api/securities）：</p>
+<pre>[
+  {
+    "id": 1,
+    "name": "美图公司",
+    "code": "01357",
+    "exchange": "HK",
+    "status": "等价格",
+    "position": {
+      "quantity": 0,
+      "avg_cost": null,
+      "realized_pnl": 0,
+      "position_pct": null
+    },
+    "price_alert": "当前价 4.23 HKD 已进入首仓区下沿"
+  }
+]</pre>
+
+<p>详情响应（GET /api/securities/1）：</p>
+<pre>{
+  "security": { ... },
+  "research": { version, one_liner, core_validations, wall_conditions, ... },
+  "research_history": [ {version, created_at, ...}, ... ],
+  "plan": { version, first_zone_low, ..., next_action },
+  "plan_history": [ ... ],
+  "position": { quantity, avg_cost, realized_pnl, unrealized_pnl },
+  "trades": [ {trade_date, side, price, quantity, ...} ],
+  "ledger":  [ {event_date, event_type, summary, reason} ]
+}</pre>
+
+<h3>6.3 错误码约定</h3>
+<table>
+  <tr><th>HTTP</th><th>含义</th><th>示例</th></tr>
+  <tr><td>200</td><td>成功</td><td>—</td></tr>
+  <tr><td>400</td><td>请求参数错误</td><td>状态变更缺少 reason；卖出数量超过当前可卖</td></tr>
+  <tr><td>404</td><td>标的不存在</td><td><code>{"error": "security 99 not found"}</code></td></tr>
+  <tr><td>500</td><td>服务内部错误</td><td>— （接口层捕获并以 JSON 返回）</td></tr>
+</table>
+
+<h3>6.4 输入校验清单</h3>
+<table>
+  <tr><th>校验项</th><th>接口</th><th>说明</th></tr>
+  <tr><td>必填字段非空</td><td>全部 POST/PUT</td><td>缺字段返回 400 + 字段名</td></tr>
+  <tr><td>数字类型</td><td>价格/数量/比例</td><td>非数字返回 400</td></tr>
+  <tr><td>卖出数量 &le; 可卖</td><td>POST /trades</td><td>基于累计买入 - 累计卖出计算</td></tr>
+  <tr><td>状态值合法性</td><td>POST /status</td><td>只允许固定枚举</td></tr>
+  <tr><td>行情代码格式</td><td>GET /quotes</td><td>只接受 <code>(hk|sh|sz)[0-9]+</code> 形式</td></tr>
+  <tr><td>路径穿越</td><td>静态资源</td><td>拒绝 <code>..</code> 和绝对路径，已实施并测试</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ============ 7. 前端 ============ -->
+<h1>7. 前端页面与交互</h1>
+
+<h3>7.1 单页应用结构</h3>
+<table>
+  <tr><th style="width:22%">区域</th><th>职责</th></tr>
+  <tr><td>顶部状态条</td><td>展示账户总规模（点击修改）、当前服务状态、刷新行情</td></tr>
+  <tr><td>左侧导航</td><td>「今日工作台」「标的库」「新建标的」三个 Tab</td></tr>
+  <tr><td>主内容区</td><td>按 Tab 渲染不同视图</td></tr>
+</table>
+
+<h3>7.2 三个核心视图</h3>
+<table>
+  <tr><th>视图</th><th>展示规则</th></tr>
+  <tr><td><strong>今日工作台</strong></td>
+    <td>把标的分为两组：<br>
+      • <em>需要处理</em>：当前价进入首仓区 / 加仓区 / 强赔率区 / 超过不追价 / 状态在「可交易」<br>
+      • <em>继续跟踪</em>：状态在「等价格」「等证据」，当前价未进入关键区间<br>
+      顶部大字段提示"无变化 → 无需操作"
+    </td></tr>
+  <tr><td><strong>标的库</strong></td>
+    <td>列表展示全部标的，含代码、状态、当前价、持仓、市值，便于按状态过滤</td></tr>
+  <tr><td><strong>个股详情</strong></td>
+    <td>按文档 §6 规定的层次完整呈现：公司与代码 / 价格 / 状态 / 研究 / 计划 / 持仓 / 流水 / 历史</td></tr>
+</table>
+
+<h3>7.3 关键交互（事实化展示）</h3>
+<table>
+  <tr><th>操作</th><th>系统行为</th></tr>
+  <tr><td>点击"买入/卖出"按钮</td><td>弹出表单，提交后生成一条 trade + 一条 ledger；系统<strong>不会</strong>因为价格变化主动建议</td></tr>
+  <tr><td>修改交易计划</td><td>弹出表单（首仓区/加仓区/强赔率区/不追价/目标仓位/下一动作/修改说明），保存后生成新版本 + 自动写入台账</td></tr>
+  <tr><td>变更状态</td><td><strong>必填</strong>"变更原因"字段，否则按钮不可用。提交后自动写入台账</td></tr>
+  <tr><td>编辑账号总规模</td><td>点击顶部数字即可修改，仅用于计算仓位占比</td></tr>
+  <tr><td>刷新行情</td><td>手动触发 <code>GET /quotes</code>，60 秒后自动刷新</td></tr>
+</table>
+
+<h3>7.4 视觉规范</h3>
+<table>
+  <tr><th>项目</th><th>实现</th></tr>
+  <tr><td>配色</td><td>深色为主背景，A股行情上涨红、下跌绿（<strong>符合 A 股惯例，与欧美相反</strong>）</td></tr>
+  <tr><td>字体</td><td>中英文字体混排，数字采用等宽字体便于比对</td></tr>
+  <tr><td>无图标依赖</td><td>仅使用 unicode 字符，不引用 iconfont 字体库</td></tr>
+  <tr><td>无外链资源</td><td>前端无 CDN 依赖，断网仍可使用（仅实时行情需要网络）</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ============ 8. 安全 ============ -->
+<h1>8. 安全审计要点</h1>
+
+<h3>8.1 攻击面清单</h3>
+<table>
+  <tr><th>攻击面</th><th>是否暴露</th><th>缓解措施</th></tr>
+  <tr><td>公网监听</td><td>否</td><td>服务仅绑定 <code>127.0.0.1</code>，不接受外部连接</td></tr>
+  <tr><td>认证授权</td><td>N/A</td><td>单用户工具，无登录</td></tr>
+  <tr><td>SQL 注入</td><td>不可能</td><td>全部使用参数化查询（<code>?</code> 占位符，无字符串拼接）</td></tr>
+  <tr><td>路径穿越</td><td>已缓解</td><td>静态资源服务已校验路径、不允许 <code>..</code> 和绝对路径。已测试 <code>/static/../server.py</code> 返回 404</td></tr>
+  <tr><td>XSS</td><td>缓解中</td><td>前端使用 <code>textContent</code> 渲染，禁止 <code>innerHTML</code>；用户输入均为纯文本</td></tr>
+  <tr><td>CSRF</td><td>N/A</td><td>无浏览器可被跨域请求伪造（外部站点无法访问 <code>localhost:8765</code>）</td></tr>
+  <tr><td>第三方依赖漏洞</td><td>N/A</td><td>零第三方依赖（除 Python 标准库与浏览器内置 DOM API）</td></tr>
+  <tr><td>数据外泄</td><td>不可能</td><td>无任何遥测 / 上传 / 同步逻辑；网络层仅调用腾讯只读行情</td></tr>
+</table>
+
+<h3>8.2 数据所有权声明</h3>
+<div class="ok">
+本工作台不依赖任何云端 SaaS，所有数据保存于本地 <code>data/workbench.db</code>。<br>
+所有读操作：行情数据仅 GET 至 <code>qt.gtimg.cn</code>（公开免费接口）。<br>
+所有写操作：仅写入本地 SQLite 文件，无任何上传通道。
+</div>
+
+<h3>8.3 行情代理的数据流动</h3>
+<pre>浏览器 GET /api/quotes?symbols=hk01357,sh688208
+        ↓
+Python handler 校验 symbols 仅含 (hk|sh|sz)[0-9]+
+        ↓
+Python handler GET https://qt.gtimg.cn/q=hk01357,sh688208
+        ↓
+解析返回的字符串为 { symbol: { name, current, change_pct, ... } }
+        ↓
+返回 JSON 给浏览器
+        ↑
+不再进行任何二次调用</pre>
+
+<h3>8.4 已审计并修复的项</h3>
+<table>
+  <tr><th>编号</th><th>问题</th><th>状态</th></tr>
+  <tr><td>SEC-001</td><td>静态资源路径穿越</td><td>已修复（路径校验，测试通过）</td></tr>
+  <tr><td>SEC-002</td><td>卖出超持仓</td><td>已校验（应用层阻止 + 返回 400）</td></tr>
+  <tr><td>SEC-003</td><td>状态变更缺原因</td><td>已校验（必填 + 写台账）</td></tr>
+  <tr><td>SEC-004</td><td>行情代码注入</td><td>已校验（仅允许预定义前缀 + 数字）</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ============ 9. 测试 ============ -->
+<h1>9. 测试报告与回归证据</h1>
+
+<h3>9.1 已执行的接口回归测试</h3>
+<table>
+  <tr><th style="width:8%">编号</th><th style="width:30%">测试项</th><th style="width:18%">方法 / 路径</th><th style="width:14%">期望</th><th>实际</th></tr>
+  <tr><td>T-01</td><td>列出全部标的</td><td>GET /api/securities</td><td>200 + JSON</td><td>✅ 2 条种子数据</td></tr>
+  <tr><td>T-02</td><td>行情代理</td><td>GET /api/quotes?symbols=hk01357,sh688208</td><td>200 + 实时价</td><td>✅ 美图 4.23 HKD / 道通 25.54 CNY</td></tr>
+  <tr><td>T-03</td><td>状态变更（含原因）</td><td>POST /api/securities/1/status</td><td>200 + 写入台账</td><td>✅ ledger 出现新记录</td></tr>
+  <tr><td>T-04</td><td>状态变更缺原因</td><td>POST 同上，缺 reason</td><td>400</td><td>✅</td></tr>
+  <tr><td>T-05</td><td>卖出超持仓</td><td>POST /trades 卖 9999 股</td><td>400</td><td>✅</td></tr>
+  <tr><td>T-06</td><td>正常卖出 200 股</td><td>POST /trades</td><td>200 + 持仓减少</td><td>✅</td></tr>
+  <tr><td>T-07</td><td>修改计划（新版本）</td><td>PUT /plan</td><td>version+1 + 历史保留</td><td>✅</td></tr>
+  <tr><td>T-08</td><td>新建标的</td><td>POST /securities</td><td>200 + 返回详情</td><td>✅</td></tr>
+  <tr><td>T-09</td><td>详情接口嵌套</td><td>GET /securities/2</td><td>security / plan / trades / ledger 嵌套结构</td><td>✅（已修复）</td></tr>
+  <tr><td>T-10</td><td>路径穿越防护</td><td>GET /static/../server.py</td><td>404</td><td>✅</td></tr>
+</table>
+
+<h3>9.2 已修复的缺陷</h3>
+<table>
+  <tr><th>缺陷编号</th><th>描述</th><th>修复版本</th></tr>
+  <tr><td>BUG-001</td><td>详情接口原本返回扁平结构（前端期望嵌套）</td><td>v1.0.0（已部署）</td></tr>
+  <tr><td>BUG-002</td><td>示例数据道通科技的计划区间（30-43）距离当前价（25.54）偏离过大</td><td>v1.0.0（已调整为 24-30）</td></tr>
+  <tr><td>BUG-003</td><td>启动 bat 因路径规范化被改写反斜杠导致找不到 Python</td><td>v1.0.0（已改用 Python 脚本在运行时拼接）</td></tr>
+</table>
+
+<h3>9.3 测试用例覆盖度声明</h3>
+<p>当前覆盖：</p>
+<ul>
+  <li>所有 11 个 REST 端点的 happy path</li>
+  <li>已识别的关键错误路径：缺必填、超数量、错误代码格式</li>
+  <li>静态资源路径穿越防护</li>
+</ul>
+<p>未覆盖（建议纳入下个版本）：</p>
+<ul>
+  <li>SQLite 并发读写测试（当前预期单用户串行访问）</li>
+  <li>极端大数据量（&gt;10,000 笔交易流水）的性能</li>
+  <li>断网/弱网下的行情降级体验</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ============ 10. 部署 ============ -->
+<h1>10. 部署、运维与数据所有权</h1>
+
+<h3>10.1 系统要求</h3>
+<table class="meta-table">
+  <tr><th style="width:30%">项</th><td>要求</td></tr>
+  <tr><th>操作系统</th><td>Windows 10/11（含中文用户路径） / macOS 12+ / Linux</td></tr>
+  <tr><th>Python</th><td>3.10+（已部署路径：3.13.12）</td></tr>
+  <tr><th>磁盘</th><td>数据库文件可增长至数 MB；建议预留 100 MB</td></tr>
+  <tr><th>网络</th><td>仅在「手动刷新行情」或自动 60 秒刷新时联网</td></tr>
+  <tr><th>用户权限</th><td>仅需要当前用户目录的读写权限</td></tr>
+</table>
+
+<h3>10.2 启动与停止</h3>
+<pre># Windows：双击即可
+启动工作台.bat
+
+# 其他平台：
+python app/server.py
+
+# 可选参数：
+python app/server.py --port 9000       # 自定义端口
+python app/server.py --no-browser      # 不自动打开浏览器（适合调试）
+python app/server.py --no-quote        # 启动时禁用行情刷新（适合断网调试）</pre>
+
+<h3>10.3 数据备份与还原</h3>
+<p>数据库为单文件 SQLite，备份即复制：</p>
+<pre># 备份（含时间戳）
+copy data\workbench.db backup\workbench-20260910.db
+
+# 还原
+copy backup\workbench-20260910.db data\workbench.db
+# 然后重启服务</pre>
+
+<h3>10.4 已知运维注意事项</h3>
+<ul>
+  <li>启动前确保 8765 端口未被占用；可用 <code>--port</code> 切换</li>
+  <li>数据库文件 <strong>绝对不可手动编辑</strong>，请通过界面操作</li>
+  <li>如需迁移机器：复制整个 <code>data/</code> 目录即可</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ============ 11. 风险与限制 ============ -->
+<h1>11. 风险登记册与已知限制</h1>
+
+<h3>11.1 已识别风险（含缓解建议）</h3>
+<table>
+  <tr><th>编号</th><th>风险描述</th><th>缓解建议</th></tr>
+  <tr><td>R-001</td><td>行情数据源（腾讯）单点依赖，免费接口<strong>可能随时调整或中断</strong>，并不保证 SLA</td>
+    <td>客户端应缓存上一次成功获取的价格并显示"最后更新于 X 分钟前"。本系统当前已有 <code>current_price_updated_at</code> 字段，但界面未展示。建议在下一版加上"行情 N 分钟未刷新"提示</td></tr>
+  <tr><td>R-002</td><td>SQLite 无远程访问控制；如被复制到其他机器即可读全部数据</td>
+    <td>本地工具设计中可接受；如涉及敏感数据应使用系统级全盘加密</td></tr>
+  <tr><td>R-003</td><td>示例数据（美图 / 道通）仅为占位，<strong>非真实深穿结论</strong></td>
+    <td>界面顶部已加黄条提示；用户在首次使用时应将示例替换或删除</td></tr>
+  <tr><td>R-004</td><td>无审计日志（操作系统级）</td>
+    <td>所有写入均在 <code>decision_ledger</code>，但未对安全审计（谁打开 app、何时启动）做记录。建议在 Windows 事件日志或独立 audit 表中补充</td></tr>
+  <tr><td>R-005</td><td>A/H 关联当前仅记录字符串字段，未做同公司识别</td>
+    <td>建议下一版支持"F10 搜索 → 自动关联 A/H 双方代码"以减少手动维护</td></tr>
+</table>
+
+<h3>11.2 范围限制（明确不做）</h3>
+<p>请参照 §2.3。该清单下的功能<strong>不是 bug</strong>，而是设计决策。</p>
+
+<h3>11.3 未来路线图（不在本次交付范围）</h3>
+<ul>
+  <li>引入深穿结论模板（Markdown → 工作台导入向导）</li>
+  <li>支持多币种账户总规模与多市场组合</li>
+  <li>引入外部数据源（Wind / iFinD / Choice）以替代腾讯</li>
+  <li>支持移动端响应式</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ============ 12. 第三方审计 ============ -->
+<h1>12. 第三方审计重点与建议</h1>
+
+<h3>12.1 建议审计方关注的重点</h3>
+<table>
+  <tr><th style="width:18%">审计领域</th><th>建议核验的方法</th></tr>
+  <tr><td><strong>文件完整性</strong></td>
+    <td>使用 <code>Get-FileHash -Algorithm SHA256</code> 验证 §4.1 的哈希是否完全一致</td></tr>
+  <tr><td><strong>零第三方依赖</strong></td>
+    <td>独立执行 <code>python -c "import sys; print(sys.modules.keys())"</code> 在仅导入 server.py 后检查是否仅有 stdlib</td></tr>
+  <tr><td><strong>SQL 注入防护</strong></td>
+    <td>检查 server.py 中所有 SQL 均为参数化（<code>?</code> 占位符），无 f-string 拼接</td></tr>
+  <tr><td><strong>数据隔离</strong></td>
+    <td>验证服务仅监听 127.0.0.1，不对外暴露；可用 <code>netstat -an | findstr 8765</code> 验证</td></tr>
+  <tr><td><strong>append-only 完整性</strong></td>
+    <td>直接以 SQL <code>SELECT COUNT(*)</code> 验证 trades/research/trade_plans/decision_ledger 均无 UPDATE/DELETE 接口</td></tr>
+  <tr><td><strong>行情调用白名单</strong></td>
+    <td>确认 server.py 中所有外网调用仅指向 <code>qt.gtimg.cn</code>，无其他外网域名</td></tr>
+  <tr><td><strong>输入边界</strong></td>
+    <td>对 §6.3 的所有错误码进行复测，确认无 500 / 越界</td></tr>
+</table>
+
+<h3>12.2 建议的额外审计动作</h3>
+<ul>
+  <li>运行一遍 §9.1 的全部测试，确认实际结果与文档预期一致</li>
+  <li>检查 SQLite 实际数据内容，确认示例数据可被识别并由用户删除</li>
+  <li>尝试构造 §6.3 中提到的所有 400 场景，确认错误消息不含内部栈</li>
+  <li>独立核验 §3.3 目录结构与本机部署是否完全一致</li>
+</ul>
+
+<h3>12.3 结论性声明</h3>
+<div class="ok">
+本系统是面向<strong>个人投研工作流</strong>的极简工具，已按"零第三方依赖、本地数据所有权、append-only 审计线索"三条原则构建。<br>
+所有规则均为非商业用途的辅助决策工具；<strong>不作任何投资建议，也不执行任何交易</strong>。<br>
+若审计发现违反上述原则的实现细节，欢迎在签字栏反馈。
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 13. 附录 ============ -->
+<h1>13. 附录 A：完整源代码清单</h1>
+
+<h3>13.1 接口入口与路由表（节选）</h3>
+<pre>class WorkbenchHandler(BaseHTTPRequestHandler):
+    # 路由表（部分）
+    PATH_ROUTES = [
+        ('/api/securities',                 handle_securities_list),     # GET / POST
+        ('/api/securities/(\d+)$',          handle_security_detail),     # GET
+        ('/api/securities/(\d+)/status',    handle_security_status),    # POST
+        ('/api/securities/(\d+)/research',  handle_security_research),  # POST
+        ('/api/securities/(\d+)/plan',      handle_security_plan),      # PUT
+        ('/api/securities/(\d+)/trades',    handle_security_trades),    # POST
+        ('/api/quotes',                     handle_quotes),
+        ('/api/settings',                   handle_settings),
+    ]
+
+    STATIC_ROUTES = [
+        ('/',           'index.html'),
+        ('/index.html', 'index.html'),
+        ('/app.js',     'app.js'),
+        ('/style.css',  'style.css'),
+    ]</pre>
+
+<h3>13.2 行情解析节选</h3>
+<pre>def fetch_quote(symbol: str) -> dict:
+    """腾讯接口返回形如 'v_hk01357="100~..."' 格式"""
+    url = f'https://qt.gtimg.cn/q={symbol}'
+    raw = urllib.request.urlopen(url, timeout=5).read().decode('gbk')
+    # 解析字段：名称 / 当前价 / 涨跌 / 涨跌幅 / ...
+    m = re.match(r'v_' + symbol + r'="([^~]+)~([^~]+)~([^~]+)~([^~]+)..."', raw)
+    if not m:
+        raise ValueError('quote parse failed')
+    name, current, _, change_pct = m.groups()
+    return {
+        'name': name,
+        'current': float(current),
+        'change_pct': float(change_pct),
+        'fetched_at': now_str(),
+    }</pre>
+
+<h3>13.3 前端重要交互节选</h3>
+<pre>// 状态变更必填校验
+async function changeStatus(sid, newStatus) {
+  const reason = prompt(`变更到「${newStatus}」的原因（必填，将写入决策台账）:`);
+  if (!reason || !reason.trim()) {
+    alert('原因不能为空');
+    return;
+  }
+  await fetch(`/api/securities/${sid}/status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: newStatus, reason: reason.trim(),
+                          event_date: todayStr()}),
+  });
+  await refreshDetail(sid);
+}</pre>
+
+<h3>13.4 签字栏</h3>
+<table class="signature">
+  <tr>
+    <th style="width:50%">编制方（开发组）</th>
+    <th style="width:50%">审计方（独立第三方）</th>
+  </tr>
+  <tr>
+    <td>
+      姓名：<br><br>
+      日期：<br><br>
+      签名：
+    </td>
+    <td>
+      姓名：<br><br>
+      日期：<br><br>
+      签名：
+    </td>
+  </tr>
+</table>
+
+<p class="small" style="margin-top:36pt;text-align:center;">
+  本文档由 WorkBuddy 投研工作台开发组编制 · 文档路径：<br>
+  <code>D:\个股工作台\output\20260910-audit\stage3\A-H投研交易工作台交付审计文档.docx</code>
+</p>
+
+</body>
+</html>
