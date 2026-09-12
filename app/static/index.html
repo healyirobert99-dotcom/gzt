@@ -7,18 +7,30 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">A/H 投研交易工作台</div>
-  <nav>
-    <a href="#/home" data-nav="home">今日工作台</a>
-    <a href="#/list" data-nav="list">标的库</a>
-    <a href="#/import" data-nav="import">导入与更新</a>
+<aside class="side-rail" aria-label="主导航">
+  <a class="rail-brand logo-brand" href="#/home" aria-label="A/H 投研交易工作台" title="A/H 投研交易工作台"><img src="/static/logo.svg" alt="A/H 投研交易工作台"></a>
+  <nav class="rail-nav">
+    <a href="#/home" data-nav="home"><span>⌂</span>工作台</a>
+    <a href="#/list" data-nav="list"><span>▦</span>股票列表</a>
+    <a href="#/import" data-nav="import"><span>⇩</span>导入与更新</a>
+    <a class="nav-static" aria-disabled="true"><span>⇄</span>交易记录</a>
+    <a class="nav-static" aria-disabled="true"><span>▤</span>研究资料</a>
+    <a class="nav-static" aria-disabled="true"><span>◫</span>策略笔记</a>
+    <a class="nav-static" aria-disabled="true"><span>⚙</span>系统设置</a>
   </nav>
+</aside>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">AH</span><span>A/H 投研交易工作台</span></div>
   <div class="top-right">
-    <span id="quote-status" class="muted"></span>
-    <button id="btn-refresh" class="btn ghost" type="button">刷新行情</button>
-    <button id="btn-settings" class="btn ghost" type="button">设置</button>
-    <a href="#/new" class="btn primary">＋ 新建标的</a>
+    <label class="command-box" aria-label="搜索股票或输入命令">
+      <span class="command-icon">⌘</span>
+      <input id="command-input" type="search" placeholder="搜索股票 / 输入命令" autocomplete="off">
+      <kbd>⌘K</kbd>
+      <div id="command-results" class="command-results" hidden></div>
+    </label>
+    <div class="top-clock"><b id="top-clock">--:--</b><small>市场交易中　<span id="quote-status" class="muted"></span></small></div>
+    <button id="btn-settings" class="user-avatar" type="button" aria-label="设置">U</button>
+    <button id="btn-refresh" class="btn ghost" type="button" hidden>刷新行情</button>
   </div>
 </header>
 <main id="app">

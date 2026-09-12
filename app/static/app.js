@@ -266,7 +266,7 @@ function routeInfo() {
   return { page: 'home' };
 }
 function setActiveNav(page) {
-  document.querySelectorAll('.topbar nav a').forEach(a => {
+  document.querySelectorAll('.rail-nav a, .topbar nav a').forEach(a => {
     a.classList.toggle('active', a.dataset.nav === page);
   });
 }
@@ -428,7 +428,7 @@ function renderList(el) {
     ${S.secs.length ? `<div class="table-wrap"><table>
       <thead><tr><th>标的</th><th>交易状态</th><th>研究池</th><th>当前价</th><th>涨跌</th><th>下一动作</th><th>变化</th></tr></thead>
       <tbody>${S.secs.map(rowHtml).join('')}</tbody>
-    </table></div>` : '<div class="empty">暂无标的，点击右上角「新建标的」开始。</div>'}
+    </table></div>` : '<div class="empty">暂无标的，请前往「导入与更新」通过 JSON 导入。</div>'}
   `;
 }
 
@@ -1395,6 +1395,285 @@ function renderImportFullDone(el) {
 
 function backToImport() { resetImport(); location.hash = '#/import'; }
 function goHome() { resetImport(); location.hash = '#/home'; }
+
+/* ==================================================================
+   UI/UX refresh · 深色金融终端
+   仅重排现有数据与既有动作；不新增接口、字段、指标或交易规则。
+   ================================================================== */
+function uiMiniChart(q, cls) {
+  if (!q || q.current == null) return '<span class="mini-chart-empty">—</span>';
+  const change = Number(q.change_pct || 0);
+  const start = change >= 0 ? 28 : 10;
+  const end = change >= 0 ? 9 : 27;
+  const mid = change >= 0 ? 17 : 18;
+  const points = `0,${start} 12,${start - (start - mid) * .25} 24,${mid + 3} 36,${mid - 3} 48,${mid + 2} 60,${mid - 5} 72,${mid + 1} 86,${end}`;
+  return `<svg class="mini-chart ${cls || ''}" viewBox="0 0 90 36" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><polyline points="${points} 90,36 0,36" fill="currentColor" opacity=".08" stroke="none"/></svg>`;
+}
+
+function uiRiskCount() {
+  return S.secs.filter(s => wallTriggered(s.research) ||
+    ((s.research && s.research.core_validations) || []).some(v => v.status === '已恶化')).length;
+}
+
+function uiLifecyclePrice(s) {
+  const q = quoteOf(s);
+  return q && !q.is_stale && q.current != null ? Number(q.current) : null;
+}
+
+function uiHasPosition(s) {
+  const qty = s.position && s.position.quantity;
+  if (qty != null && Number(qty) > 0) return true;
+  // 当前系统部分标的还没有正式流水，沿用现有 status 作为临时持仓 fallback。
+  return s.status === '持仓中';
+}
+
+function uiZoneRange(plan, key, currency) {
+  const low = plan[key + '_low'], high = plan[key + '_high'];
+  return low != null && high != null ? zoneStr(low, high, decOf(currency)) : '';
+}
+
+function uiLifecycle(s) {
+  const p = s.plan || {};
+  const price = uiLifecyclePrice(s);
+  const d = decOf(s.currency);
+  const hasPosition = uiHasPosition(s);
+  const wall = wallTriggered(s.research);
+  const zone = (key) => price != null && inZone(price, p[key + '_low'], p[key + '_high']);
+  const firstComplete = p.first_zone_low != null && p.first_zone_high != null;
+  const addComplete = p.add_zone_low != null && p.add_zone_high != null;
+  const firstRange = uiZoneRange(p, 'first_zone', s.currency);
+  const addRange = uiZoneRange(p, 'add_zone', s.currency);
+  const oddsRange = uiZoneRange(p, 'odds_zone', s.currency);
+  const corePool = String((s.research && s.research.research_pool) || s.research_pool || '');
+  const isCore = /核心/.test(corePool);
+  const otherAttention = attention(s).filter(text => !/价格进入|超过不追价|高于首仓区|低于首仓区/.test(text));
+  const base = { hasPosition, price, nextRange: '', distance: null, reason: '', primary: '', nextLabel: '', bucket: 'candidate', risk: wall };
+
+  if (wall) {
+    return { ...base, bucket: 'today', sortRank: 0, reason: '危墙条件已触发', primary: '风险优先重新判断', nextLabel: '查看危墙与动态执行' };
+  }
+
+  if (hasPosition) {
+    if (zone('odds_zone')) return { ...base, bucket: 'today', sortRank: 1, reason: `已进入强赔率区 ${oddsRange}`, primary: '当前已进入强赔率区', nextLabel: '重新检查基本面和动态执行判断' };
+    if (zone('add_zone')) return { ...base, bucket: 'today', sortRank: 2, reason: `已进入加仓区 ${addRange}`, primary: '当前已进入加仓区', nextLabel: '是否加仓需结合最新动态执行判断' };
+    if (otherAttention.length) return { ...base, bucket: 'today', sortRank: 4, reason: otherAttention[0], primary: '需要重新打开判断', nextLabel: '查看动态执行与研究事实' };
+    if (addComplete) {
+      const distance = price != null && price > p.add_zone_high ? price - p.add_zone_high : null;
+      return { ...base, bucket: 'holding', sortRank: 0, nextRange: addRange, distance, primary: '首仓已完成', nextLabel: '下一价格观察：加仓区 ' + addRange, reason: distance != null ? `距加仓区上沿 ${num(distance, d)}` : '等待进入加仓区' };
+    }
+    return { ...base, bucket: 'holding', sortRank: 1, primary: '当前持仓', nextLabel: '下一观察：等待动态执行 / 研究证据', reason: '暂无完整加仓价格带' };
+  }
+
+  if (zone('odds_zone') || zone('add_zone') || (firstComplete && price != null && price < p.first_zone_low)) {
+    const reason = price != null && firstComplete && price < p.first_zone_low
+      ? `价格已低于原首仓区 ${firstRange}，当前无仓位`
+      : `当前无仓位，价格已进入原${zone('add_zone') ? '加仓区' : '强赔率区'} ${zone('add_zone') ? addRange : oddsRange}`;
+    return { ...base, bucket: 'today', sortRank: 3, reason, primary: '当前无仓位，需重新判断首仓方案', nextLabel: '形成/更新动态执行判断' };
+  }
+  if (zone('first_zone')) return { ...base, bucket: 'today', sortRank: 3, reason: `已进入首仓区 ${firstRange}`, primary: '已进入首仓区', nextLabel: '形成/更新动态执行判断' };
+  if (otherAttention.length) return { ...base, bucket: 'today', sortRank: 4, reason: otherAttention[0], primary: '需要重新打开判断', nextLabel: '查看动态执行与研究事实' };
+  if (firstComplete) {
+    const distance = price != null && price > p.first_zone_high ? price - p.first_zone_high : null;
+    return { ...base, bucket: 'first', sortRank: 0, nextRange: firstRange, distance, primary: '当前未持仓', nextLabel: '下一价格观察：首仓区 ' + firstRange, reason: distance != null ? `距首仓区上沿 ${num(distance, d)}` : '等待进入首仓区' };
+  }
+
+  if (isCore) return { ...base, bucket: 'core', sortRank: 0, primary: '等待价格 / 证据', nextLabel: '核心验证：' + ((s.research && s.research.core_validations || [])[0]?.content || '等待研究证据'), reason: '核心候选，当前主要等待研究证据' };
+  return { ...base, bucket: 'candidate', sortRank: 0, primary: '候补研究', nextLabel: '等待人工确认优先级', reason: '当前不属于核心交易候选' };
+}
+
+function uiLifecycleSort(a, b) {
+  const la = uiLifecycle(a), lb = uiLifecycle(b);
+  if (la.sortRank !== lb.sortRank) return la.sortRank - lb.sortRank;
+  if (la.distance != null && lb.distance != null) return la.distance - lb.distance;
+  return S.secs.indexOf(a) - S.secs.indexOf(b);
+}
+
+function uiPositionBand(s, life = uiLifecycle(s)) {
+  const p = s.plan || {};
+  const q = quoteOf(s);
+  const price = q && !q.is_stale ? q.current : null;
+  const d = decOf(s.currency);
+  const ranges = [p.odds_zone_low, p.odds_zone_high, p.add_zone_low, p.add_zone_high, p.first_zone_low, p.first_zone_high, p.no_chase_price].filter(v => v != null).map(Number);
+  const min = ranges.length ? Math.min(...ranges) : 0;
+  const max = ranges.length ? Math.max(...ranges) : 1;
+  const span = Math.max(max - min, 1);
+  const zones = [
+    ['强赔率区', p.odds_zone_low, p.odds_zone_high, 'odds'],
+    ['加仓区', p.add_zone_low, p.add_zone_high, 'add'],
+    ['首仓区', p.first_zone_low, p.first_zone_high, 'first'],
+  ];
+  const active = zones.find(z => inZone(price, z[1], z[2]));
+  const activeLabel = active ? active[0] : (price != null && p.no_chase_price != null && price > p.no_chase_price ? '不追价' : '区间外');
+  const marker = price == null ? null : Math.max(1, Math.min(99, ((price - min) / span) * 100));
+  const track = `<div class="price-track"><span class="track-line"></span>${zones.map(z => `<span class="track-zone ${z[3]}" style="left:${Math.max(0, Math.min(100, (((z[1] || min) - min) / span) * 100))}%;width:${Math.max(5, (((z[2] || z[1] || min) - (z[1] || min)) / span) * 100)}%"></span>`).join('')}${p.no_chase_price != null ? `<span class="track-no-chase" style="left:${Math.max(0, Math.min(100, ((p.no_chase_price - min) / span) * 100))}%"></span>` : ''}${marker != null ? `<span class="track-marker" style="left:${marker}%"><i>${num(price, d)}</i></span>` : ''}</div>`;
+  return `<div class="price-rail lifecycle-rail ${life.hasPosition ? 'holding-rail' : ''} ${life.bucket === 'today' ? 'attention-rail' : ''}" aria-label="静态价格位置"><div class="price-band-title">价格区间</div><div class="rail-legend">${zones.map(z => { const zr = zoneStr(z[1], z[2], d); const compactZr = zr.replace(/\s*[–-]\s*/g, '–'); const activeClass = active && active[3] === z[3] ? 'active-zone' : ''; const nextClass = life.nextRange && zr === life.nextRange ? 'next-zone' : ''; return `<span class="rail-zone-${z[3]} ${activeClass} ${nextClass}"><i class="legend-dot ${z[3]}"></i><b>${z[0]}</b><em>${compactZr || '未设置'}</em></span>`; }).join('')}<span class="rail-zone-no-chase"><i class="legend-dot no-chase"></i><b>不追价</b><em>&gt;${p.no_chase_price != null ? num(p.no_chase_price, d) : '未设置'}</em></span></div>${track}<div class="rail-labels"><span>${num(min, d)}</span><span>${p.first_zone_low != null ? num(p.first_zone_low, d) : '—'}</span><span>${p.no_chase_price != null ? '&gt; ' + num(p.no_chase_price, d) : '—'}</span></div><div class="band-caption"><span>${life.hasPosition && life.nextRange ? '下一关注' : '当前所在'}</span><b>${esc(life.nextRange || activeLabel)}</b></div></div>`;
+}
+
+function uiQuickActions(s) {
+  return `<div class="quick-actions" onclick="event.stopPropagation()">
+    <button type="button" class="quick-action" onclick="openExecutionModal(${s.id})"><span>↗</span>执行</button>
+    <button type="button" class="quick-action" onclick="openTradeModal(${s.id})"><span>⇄</span>交易</button>
+    <button type="button" class="quick-action" onclick="openResearchModal(${s.id})"><span>⌁</span>研究</button>
+    <button type="button" class="quick-action" onclick="openMoreActions(${s.id})"><span>···</span>更多</button>
+  </div>`;
+}
+
+function openMoreActions(id) {
+  openModal('更多操作', `<div class="more-actions">
+    <button class="btn" type="button" onclick="closeModal();openStatusModal(${id})">变更状态</button>
+    <button class="btn" type="button" onclick="closeModal();openPlanModal(${id})">修改交易计划</button>
+    <button class="btn" type="button" onclick="closeModal();openBasicModal(${id})">编辑基本信息</button>
+    <button class="btn" type="button" onclick="closeModal();openNoteModal(${id})">添加决策记录</button>
+  </div>`, null, '关闭');
+}
+
+function uiCardHtml(s, compact) {
+  const q = quoteOf(s), d = decOf(s.currency), plan = s.plan || {};
+  const exec = s.execution_latest;
+  const life = uiLifecycle(s);
+  const risk = life.risk || ((s.research && s.research.core_validations) || []).some(v => v.status === '已恶化');
+  const bucketClass = 'lifecycle-' + life.bucket;
+  return `<article class="terminal-card lifecycle-card ${compact ? 'compact-card' : ''} ${bucketClass} ${risk ? 'has-risk' : ''}" tabindex="0" data-sec-id="${s.id}" onclick="location.hash='#/s/${s.id}'">
+    <div class="terminal-card-head">
+      <div class="identity"><div class="identity-name">${esc(s.name)}</div><div class="identity-code">${esc(s.code)} · ${esc(s.exchange)} · ${esc(s.market || '')}</div></div>
+      ${statusBadge(s.status)}
+    </div>
+    <div class="quote-row">
+      <div><div class="quote-price">${q ? curSym(s.currency) + ' ' + num(q.current, d) : '暂无行情'}</div><div class="quote-change ${q ? (q.change_pct >= 0 ? 'up' : 'down') : ''}">${q ? (q.change_pct >= 0 ? '+' : '') + num(q.change_pct, 2) + '%' : '等待行情'}</div></div>
+      ${uiMiniChart(q, q && q.change_pct >= 0 ? 'trend-up' : 'trend-down')}
+    </div>
+    <div class="lifecycle-focus"><strong>${esc(life.primary)}</strong><span>${esc(life.reason)}</span></div>
+    <div class="lifecycle-next"><span>${esc(life.nextLabel || '下一观察')}</span>${life.distance != null ? `<b>距目标 ${num(life.distance, d)}</b>` : ''}</div>
+    ${uiPositionBand(s, life)}
+    <div class="exec-focus exec-neutral ${exec ? '' : 'is-empty'}">
+      <div class="eyebrow">动态执行判断</div>
+      <div class="exec-view">${esc(exec ? (exec.execution_view || '—') : '尚未形成动态执行判断')}</div>
+      ${exec && exec.execution_condition ? `<div class="exec-sub">${esc(exec.execution_condition)}</div>` : ''}
+    </div>
+    <div class="next-action"><span>下一动作</span><b>${esc(plan.next_action || life.nextLabel || '—')}</b></div>
+    ${compact ? '' : uiQuickActions(s)}
+  </article>`;
+}
+
+function renderTerminalHome(el) {
+  const groups = { today: [], holding: [], first: [], core: [], candidate: [] };
+  S.secs.forEach(s => groups[uiLifecycle(s).bucket].push(s));
+  Object.values(groups).forEach(list => list.sort(uiLifecycleSort));
+  const section = (key, title, kicker, list, compact) => `<section class="work-section lifecycle-section lifecycle-${key}-section"><div class="section-heading"><div><div class="section-kicker">${kicker}</div><h2>${title}</h2></div><span>${list.length} 个标的</span></div>${list.length ? `<div class="terminal-grid">${list.map(s => uiCardHtml(s, compact)).join('')}</div>` : '<div class="empty-state"><div><b>暂无标的</b></div></div>'}</section>`;
+  el.innerHTML = `<div class="workspace-shell">
+    ${section('today', '进入首仓区', 'TODAY / DECISION', groups.today, false)}
+    ${section('holding', '伺机加仓', 'HOLDING / NEXT TARGET', groups.holding, false)}
+    ${section('first', '价格观察', 'WAITING / FIRST ENTRY', groups.first, false)}
+    ${section('core', '核心观察', 'CORE / EVIDENCE', groups.core, true)}
+    <section class="work-section lifecycle-candidate-section"><div class="section-heading"><div><div class="section-kicker">RESEARCH / CANDIDATES</div><h2>候补研究</h2></div><span>${groups.candidate.length} 个标的</span></div><details class="candidate-disclosure" ${groups.candidate.length ? '' : 'open'}><summary>默认折叠 · ${groups.candidate.length} 个标的</summary>${groups.candidate.length ? `<div class="terminal-grid">${groups.candidate.map(s => uiCardHtml(s, true)).join('')}</div>` : '<div class="empty-state"><div><b>暂无候补标的</b></div></div>'}</details></section>
+  </div>`;
+}
+
+function uiDrawerDetail(d) {
+  const s = d.security, r = d.research || {}, p = d.plan || {}, q = quoteOf(s), dec = decOf(s.currency);
+  const e = d.execution_latest;
+  const vals = r.core_validations || [], walls = r.wall_conditions || [];
+  const wallCount = walls.filter(w => w.triggered).length;
+  const support = e && e.support_zone ? e.support_zone : '—';
+  return `<div class="drawer-mask" onclick="if(event.target===this)closeDrawer()"><aside class="detail-drawer" role="dialog" aria-label="标的详情">
+    <button class="drawer-close" type="button" onclick="closeDrawer()" aria-label="关闭">×</button>
+    <div class="drawer-scroll">
+      <div class="drawer-header"><div class="eyebrow">${esc(s.market || s.exchange)} · ${esc(s.currency)}</div><h2>${esc(s.name)}</h2><div class="drawer-code">${esc(s.code)} · ${esc(s.exchange)} ${statusBadge(s.status)}</div>
+        <div class="drawer-quote"><div><b>${q ? curSym(s.currency) + ' ' + num(q.current, dec) : '暂无行情'}</b><span class="${q && q.change_pct >= 0 ? 'up' : 'down'}">${q ? (q.change_pct >= 0 ? '+' : '') + num(q.change_pct, 2) + '%' : '—'}</span></div>${uiMiniChart(q, q && q.change_pct >= 0 ? 'trend-up' : 'trend-down')}</div>
+      </div>
+      <section class="drawer-section execution-panel"><div class="drawer-section-title"><span class="section-kicker">01 · PRIORITY</span><button class="btn sm ghost" onclick="openExecutionModal(${s.id})">更新</button></div><h3>动态执行判断</h3>
+        ${e ? `<div class="execution-hero"><div class="eyebrow">当前判断</div><strong>${esc(e.execution_view || '—')}</strong><span>${esc(e.execution_date || '')}</span></div><div class="detail-kv"><span>支撑 / 压力</span><b>${esc(support)} / ${esc(e.resistance_zone || '—')}</b></div><div class="detail-kv"><span>技术结构</span><b>${esc(e.technical_structure || '—')}</b></div><div class="detail-kv"><span>等待条件</span><b>${esc(e.execution_condition || '—')}</b></div><div class="detail-kv"><span>本次依据</span><b>${esc(e.reason || '—')}</b></div>` : '<div class="drawer-empty">尚未形成动态执行判断</div>'}
+      </section>
+      <section class="drawer-section"><div class="drawer-section-title"><span class="section-kicker">02 · PLAN</span><button class="btn sm ghost" onclick="openPlanModal(${s.id})">修改</button></div><h3>静态交易计划</h3>${uiPositionBand(s)}<div class="detail-kv"><span>目标仓位</span><b>${p.target_position_pct != null ? num(p.target_position_pct, 1) + '%' : '—'}</b></div><div class="detail-kv"><span>下一动作</span><b>${esc(p.next_action || '—')}</b></div></section>
+      <section class="drawer-section"><div class="drawer-section-title"><span class="section-kicker">03 · RESEARCH FACTS</span><button class="btn sm ghost" onclick="openResearchModal(${s.id})">查看 / 更新</button></div><h3>核心验证项 <small>${vals.length} 项 · ${validationSummary(r)}</small></h3>${vals.length ? `<details class="drawer-disclosure"><summary>${vals.length} 项跟踪中　展开</summary><ul class="vlist">${vals.map(v => `<li><span class="tag ${v.status === '已恶化' ? 'worse' : v.status === '已验证' ? 'proven' : 'track'}">${esc(v.status)}</span><span>${esc(v.content)}</span></li>`).join('')}</ul></details>` : '<div class="drawer-empty">尚未录入核心验证项</div>'}</section>
+      <section class="drawer-section ${wallCount ? 'wall-section-fired' : ''}"><div class="drawer-section-title"><span class="section-kicker">04 · WALLS</span>${wallCount ? '<span class="risk-pill">已触发 ' + wallCount + ' 项</span>' : '<span class="safe-pill">未触发</span>'}</div><h3>危墙条件 <small>（${walls.length}）</small></h3>${walls.length ? `<details class="drawer-disclosure" ${wallCount ? 'open' : ''}><summary>${wallCount ? '发现已触发项　展开' : '未触发　展开'}</summary><ul class="vlist wall-list">${walls.map(w => `<li class="${w.triggered ? 'wall-fired' : ''}"><span class="tag ${w.triggered ? 'fired' : 'safe'}">${w.triggered ? '已触发' : '未触发'}</span><span>${esc(w.content)}</span></li>`).join('')}</ul></details>` : '<div class="drawer-empty">尚未录入危墙条件</div>'}</section>
+      <section class="drawer-section research-summary"><h3>研究摘要</h3><p>${esc(r.one_liner || '尚未录入研究结论。')}</p></section>
+    </div>
+    <div class="drawer-actions"><button class="btn primary" onclick="openExecutionModal(${s.id})">↗ 更新动态执行</button><button class="btn" onclick="openTradeModal(${s.id})">⇄ 录入交易</button><button class="btn ghost" onclick="openResearchModal(${s.id})">⌁ 查看研究</button><button class="btn ghost" onclick="openMoreActions(${s.id})">··· 更多</button></div>
+  </aside></div>`;
+}
+
+async function openDetailDrawer(id) {
+  const root = document.getElementById('drawer-root') || (() => { const x = document.createElement('div'); x.id = 'drawer-root'; document.body.appendChild(x); return x; })();
+  root.innerHTML = '<div class="drawer-mask"><aside class="detail-drawer"><div class="drawer-loading">加载标的详情…</div></aside></div>';
+  try { root.innerHTML = uiDrawerDetail(await api('/api/securities/' + id)); S.drawerId = Number(id); document.body.classList.add('drawer-open'); document.querySelectorAll('.terminal-card').forEach(card => card.classList.toggle('selected-card', Number(card.dataset.secId) === S.drawerId)); } catch (e) { root.innerHTML = ''; }
+}
+function closeDrawer() { const root = document.getElementById('drawer-root'); if (root) root.innerHTML = ''; document.body.classList.remove('drawer-open'); document.querySelectorAll('.selected-card').forEach(card => card.classList.remove('selected-card')); S.drawerId = null; if (routeInfo().page === 'detail') history.pushState({}, '', '#/home'); }
+
+function renderTerminal(el) {
+  const r = routeInfo();
+  if (r.page !== 'detail' && S.drawerId) {
+    const drawerRoot = document.getElementById('drawer-root');
+    if (drawerRoot) drawerRoot.innerHTML = '';
+    document.body.classList.remove('drawer-open');
+    S.drawerId = null;
+  }
+  setActiveNav(r.page === 'detail' ? 'home' : r.page);
+  if (r.page === 'home') return renderTerminalHome(el);
+  if (r.page === 'detail') { renderTerminalHome(el); return openDetailDrawer(r.id); }
+  if (r.page === 'list') return renderList(el);
+  if (r.page === 'new') { location.hash = '#/import'; return; }
+  if (r.page === 'import') return renderImportPanel(el, r.mode);
+}
+
+/* 覆盖渲染入口，保留所有原有业务函数与页面路由。 */
+render = async function() {
+  const el = $('#app');
+  try { await renderTerminal(el); } catch (e) { el.innerHTML = '<div class="empty">页面加载失败：' + esc(e.message) + '</div>'; }
+};
+
+const uiOriginalRenderImportPanel = renderImportPanel;
+renderImportPanel = function(el, mode) {
+  uiOriginalRenderImportPanel(el, mode);
+  const active = mode === 'landing' ? 0 : (Import.step === 'preview' ? 1 : Import.step === 'done' ? 2 : 0);
+  const steps = ['① 粘贴', '② 差异预览', '③ 完成'];
+  el.insertAdjacentHTML('afterbegin', `<div class="import-steps">${steps.map((x, i) => `<div class="import-step ${i === active ? 'active' : ''}">${x}</div>`).join('')}</div>`);
+};
+
+function setupTerminalInteractions() {
+  const input = $('#command-input');
+  if (!input) return;
+  const results = $('#command-results');
+  const clock = $('#top-clock');
+  const updateClock = () => { if (clock) clock.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); };
+  updateClock();
+  setInterval(updateClock, 30000);
+  const drawCommands = (query) => {
+    const q = String(query || '').trim().toLowerCase();
+    const commands = [
+      { label: '打开今日工作台', hint: '导航', run: () => { location.hash = '#/home'; } },
+      { label: '导入与更新', hint: '导航', run: () => { location.hash = '#/import'; } },
+      { label: '标的库', hint: '导航', run: () => { location.hash = '#/list'; } },
+      ...S.secs.filter(s => !q || (s.name + s.code + s.exchange).toLowerCase().includes(q)).slice(0, 6).map(s => ({ label: '打开 ' + s.name, hint: s.code + ' · ' + s.exchange, run: () => { location.hash = '#/s/' + s.id; } }))
+    ].filter(c => !q || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q));
+    results.innerHTML = commands.slice(0, 7).map((c, i) => `<button type="button" class="command-item" data-command-index="${i}"><span>${esc(c.label)}</span><small>${esc(c.hint)}</small></button>`).join('');
+    results.hidden = !commands.length;
+    results.querySelectorAll('.command-item').forEach((b, i) => b.addEventListener('click', () => { commands[i].run(); input.value = ''; results.hidden = true; }));
+  };
+  input.addEventListener('focus', () => drawCommands(input.value));
+  input.addEventListener('input', () => drawCommands(input.value));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = results.querySelector('.command-item'); if (first) first.click(); } if (e.key === 'Escape') { results.hidden = true; input.blur(); } });
+  document.addEventListener('click', e => { if (!e.target.closest('.command-box')) results.hidden = true; });
+}
+
+document.addEventListener('keydown', e => {
+  const active = document.activeElement;
+  const editing = active && (active.matches('input, textarea, select, [contenteditable="true"]') || active.isContentEditable);
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#command-input')?.focus(); return; }
+  if (editing) return;
+  if (e.key === 'Escape' && S.drawerId) { e.preventDefault(); closeDrawer(); return; }
+  if (S.drawerId && e.key.toLowerCase() === 'e') { e.preventDefault(); openExecutionModal(S.drawerId); return; }
+  if (S.drawerId && e.key.toLowerCase() === 't') { e.preventDefault(); openTradeModal(S.drawerId); return; }
+  if (S.drawerId && e.key.toLowerCase() === 'r') { e.preventDefault(); openResearchModal(S.drawerId); return; }
+  if (routeInfo().page !== 'home') return;
+  const cards = [...document.querySelectorAll('.terminal-card')];
+  if (!cards.length) return;
+  S.focusIndex = S.focusIndex == null ? 0 : S.focusIndex;
+  if (e.key.toLowerCase() === 'j' || e.key.toLowerCase() === 'k') { e.preventDefault(); S.focusIndex = (S.focusIndex + (e.key.toLowerCase() === 'j' ? 1 : -1) + cards.length) % cards.length; cards.forEach((c, i) => c.classList.toggle('keyboard-focus', i === S.focusIndex)); cards[S.focusIndex].scrollIntoView({ block: 'nearest' }); }
+  if (e.key === 'Enter') { e.preventDefault(); const id = cards[S.focusIndex].dataset.secId; location.hash = '#/s/' + id; }
+});
+
+setupTerminalInteractions();
 
 /* ---- execution-only 粘贴页 ---- */
 /* v1.0.8：移除内置示例（原示例绑定某个真实候选标的）。
