@@ -1,0 +1,3 @@
+e6454fc3a37456df9595be108dc85f1ca7c8033cca51c92d9a64c19082db136f  frontend/app/static/app.js
+7e8cea76a64baae03a307c3b3bbb750516a3c18ae23c62b64eb058d1855bdb37  frontend/app/static/index.html
+0a07dda18a52e86ecb08d316a5630f42f53f07a1e3e0aa64d1cd537ee134dc3e  frontend/app/static/style.css
