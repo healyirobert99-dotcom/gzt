@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A/H 投研交易工作台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">AH</span><span>A/H 投研交易工作台</span></div>
+  <nav>
+    <a href="#/home" data-nav="home">今日工作台</a>
+    <a href="#/list" data-nav="list">标的库</a>
+    <a href="#/import" data-nav="import">导入与更新</a>
+  </nav>
+  <div class="top-right">
+    <label class="command-box" aria-label="搜索股票或输入命令">
+      <span class="command-icon">⌘</span>
+      <input id="command-input" type="search" placeholder="搜索股票 / 输入命令" autocomplete="off">
+      <kbd>⌘K</kbd>
+      <div id="command-results" class="command-results" hidden></div>
+    </label>
+    <span id="quote-status" class="muted"></span>
+    <button id="btn-refresh" class="btn ghost" type="button">刷新行情</button>
+    <button id="btn-settings" class="btn ghost" type="button">设置</button>
+  </div>
+</header>
+<main id="app">
+  <div class="empty">加载中…</div>
+</main>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
