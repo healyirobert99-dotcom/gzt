@@ -63,6 +63,17 @@
   CreateProcess 拒绝，且失败时 stdout 为空、**极易被误判成断言通过**。
 - Python 读 CRLF 文本若不加 `newline=''`，universal newlines 会折掉 `\r`，
   `text.index(':label\r\n')` 会抛 `ValueError`。
+- **Bash heredoc 会改写内嵌的 Windows 路径**：`<<'PYEOF'` 里写 `'C:\\Users\\...'`
+  实际送到 Python 的会变成 `C:/Users///u5b9c...`（`\\`→`/`、`\u`→`/u`），
+  表现为 `FileNotFoundError` 且路径长得莫名其妙。**对策：探针脚本一律用 Write 工具
+  落成真实文件再执行**，不要用 heredoc 传含反斜杠的源码。
+- **运行工作台会改写 `data/workbench.db`**：`init_db()` 与页面/接口访问会触发行情刷新，
+  只改 `securities.current_price` / `current_price_updated_at` 两列。
+  因此**任何"跑起来验证"之后 `git status` 都会显示该库被改**。
+  对策：验证后 `git restore data/workbench.db` 回到仓库版本（行情下次开 app 自会刷新），
+  或**明确**作为一次 data 提交推上去——**不要让它悄悄留在工作区**。
+  另：即使 `mode=ro` 打开 WAL 库也会生成 `-shm`/`-wal`（已被 `.gitignore` 覆盖，
+  `-wal` 常为 0 字节，可直接删）。
 - **MSYS2 版 ssh（`/usr/bin/ssh`）在中文用户名 HOME 下彻底不可用**：它把
   `HOME=/c/Users/宜春法院` 按本地 ANSI(GBK) 处理，去找
   `/c/Users/\322\313\264\272\267\250\324\272/.ssh/known_hosts`，于是**既读不到
@@ -116,7 +127,21 @@
   ③ 端到端 A/B/C：解压交付包到全新目录，用它自己那份 bat，在**真实持久 PATH** 下实跑，
   必须"新 bat 能起、旧 bat 起不来"，且**按端口属主杀进程树**收尾
   （`Popen.kill()` 只杀 cmd.exe，子进程 python 会继续占端口 → 后续实验误判）。
- 探针见 `.tmp_v108x/verify/e2e_launcher_v110.py`（11 断言）。
+  探针见 `.tmp_v108x/verify/e2e_launcher_v110.py`（11 断言）。
+
+### 桌面启动器（`C:\Users\宜春法院\Desktop\启动工作台.bat`，2026-09-14 建立）
+
+- **薄封装 + 委托**：只做「检查项目在不在 → `call "%WB%\<项目启动器>"`」，
+  **绝不复制解释器探测逻辑**（否则两份会漂移）。WB 硬编码为 `D:\个股工作台`。
+- **编码与项目启动器相反**：项目内那份必须 ASCII（见上）；桌面这份**必须含中文路径**，
+  故用 **UTF-8 无 BOM + CRLF + 第 2 行 `chcp 65001 >nul`**，且**首个非 ASCII 行之前的
+  各行必须全是 ASCII**（cmd 先按默认代码页读，chcp 之后才按 65001 重读）。
+  本机已有同约定可用先例：`桌面\video知识库剪贴板监控.bat`。
+- **两条守卫**：① `%~f0` 等于 `%WB%\<启动器>` 时拒绝（防被复制回项目目录后无限自调用）；
+  ② 项目路径不存在时打印指引并 `exit /b 1`。
+- **由脚本生成**，不手写：`.tmp_v108x/verify/make_desktop_launcher.py`（控制编码/行尾/无 BOM
+  并回读校验）。验证：`e2e_desktop_launcher.py`（真实持久 PATH + cwd=桌面 + BROWSER 打桩，
+  8 断言）、`neg_desktop_launcher.py`（守卫与提示 5 断言）。
 
 ## 待批准 / 开放项（不得自行推进）
 
