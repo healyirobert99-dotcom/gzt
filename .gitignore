@@ -24,6 +24,11 @@ env/
 # 真实数据库位于 data/workbench.db，此处只是历史误建的占位文件。
 /workbench.db
 
+# ---- SQLite 运行时伴生文件（只读连接也会生成 -shm/-wal，绝不入库）----
+*.db-shm
+*.db-wal
+*.db-journal
+
 # ---- 操作系统垃圾 ----
 .DS_Store
 .DS_Store?
