@@ -73,21 +73,29 @@
   自检：`<ssh> -G github.com | grep '^user'` 应输出 `user git`
   （MSYS2 版会输出 `user 宜春法院`，即 config 根本没被读）。
 
-## Git 版本管理与远程仓库（2026-09-11 建立）
+## Git 版本管理与远程仓库（2026-09-11 建立，09-14 起远程为权威源）
 
 - 仓库：`git@github.com:healyirobert99-dotcom/gzt.git`，**公开仓库**，默认分支 `main`
 - git 身份（`--local`）：`healyirobert99-dotcom` /
   `healyirobert99-dotcom@users.noreply.github.com`
 - 已设 `core.autocrlf=false`（保证入库字节与工作区逐字节一致）、`core.quotepath=false`
-  （中文文件名不转义）、`core.sshCommand` 见上一节的坑。
+  （中文文件名不转义）、`core.sshCommand` 指向 Windows 原生 OpenSSH（见上一节的坑）。
 - 密钥：`~/.ssh/id_ed25519_gzt`（项目专用）；`~/.ssh/config` 内 `IdentityFile` +
-  `IdentitiesOnly yes`。**公钥需用户在 GitHub 账号侧添加后才可推送。**
-- **内容策略由用户明确拍板为"完整留档"**：源码、测试、样例、审计材料、
-  **真实数据库快照**（含 7 只标的的研究结论与交易计划）、历史归档
-  （`archive/` `audit_pack_src/` `pack_v106_src/` `.tmp_v108x/`）**全部入库**。
-  `.gitignore` 只排 `__pycache__/`、`*.py[cod]`、根目录 0 字节 `workbench.db`
-  与系统 / 编辑器垃圾。
-- **风险已当面告知**：仓库公开，上述数据对互联网可见；日后若要转私有或撤下，
+  `IdentitiesOnly yes`。公钥已由用户添加到 GitHub 账号（2026-09-11）。
+- **权威流向（2026-09-14 起）：远程 → 本地**。用户会在 GitHub 网页端直接上传/维护
+  （提交消息为英文风格），本地改动前先 `git fetch` 对齐，避免分叉。
+- **本环境的同步标准操作**：`git fetch origin` → `git ls-remote origin refs/heads/main`
+  拿显式 hash → `git reset --hard <完整hash>`。**不要用 `origin/main` 引用**——
+  环境的文件拦截会清除 `.git/refs/remotes/` 下新建的引用（fetch 刚建立就消失，
+  `git status` 恒显示 `[gone]`），但不影响 `.git/config` 里的跟踪配置。
+- 内容策略为"完整留档"（用户拍板）：源码、测试、样例、审计材料、**真实数据库快照**、
+  历史归档全部入库。`.gitignore` 只排 `__pycache__/`、`*.py[cod]` 与系统 / 编辑器垃圾
+  （注意：根目录 `workbench.db` 的 ignore 规则对已跟踪文件无效）。
+- **当前同步点**：`70cbed3`（2026-09-14 覆盖本地），190 个跟踪文件；
+  `data/workbench.db` 已是用户云端演进版（**16 只标的**，research 17 / plan 21 /
+  execution 29 / ledger 57，integrity ok）。本地两个中文提交（`eb91952`/`4511cfc`）
+  仍完整保留在远程历史中。
+- **风险已当面告知**：仓库公开，真实标的数据对互联网可见；日后若要转私有或撤下，
   必须提醒"可能已被 fork / 缓存，删除不等于消失"。
 
 ## 启动器约定（`启动工作台.bat`，2026-09-11 重写）
@@ -124,8 +132,15 @@
 - `trades` 冲正机制（A/B/C 三方向待批）
 - `securities.research_pool` 字段彻底废弃（SQLite 不支持 DROP COLUMN）
 - 工作区临时目录清理（`archive/`、`audit_pack_src/`、`pack_v106_src/`、`.tmp_v108x/`、
-  根目录旧版 `PACK_MANIFEST.md`/`PACK_NOTES.md`）
-- 仓库尚未初始化 git
+  根目录旧版 `PACK_MANIFEST.md`/`PACK_NOTES.md`）——已被用户改判为「一并入库」（2026-09-11），
+  不再是清理项；但**删除或整理工作区文件仍需单独批准**。
+- **根目录平铺重复文件**（2026-09-14 发现）：`index.html` / `logo.svg` / `style.css` /
+  `workbench.db` 是 GitHub 网页上传产生的、与 `app/static/` 和 `data/` 正式文件重复的
+  平铺副本，已在远程仓库中被跟踪。清理需用户指示（本地删 → commit → push）。
+- **环境陷阱（2026-09-14 确认）**：连续多次 Edit 同一文件时，**部分编辑可能被环境的
+  文件回滚机制静默吞掉**（工具返回成功但内容未持久化——9/11 对 MEMORY.md 待办段的
+  编辑即如此，直到 9/14 才发现）。对策：关键编辑后必须 `grep` 验证关键内容在文件里；
+  commit 前用 `git diff` 复核实际变更。
 
 ## 已修复缺陷登记（不得回退）
 
