@@ -50,6 +50,11 @@
 - 导入为**两段式**：preview 不写库 + commit 单一 SQLite 事务（任一只失败整批 ROLLBACK）。
 - 导入路径**不触碰 `trades`**（trades 由"录入交易流水"独立管理）；execution 为 append-only。
 - 不实现：AI 自由文本解析 / Markdown 解析 / 文件拖拽 / 自动联网补全。
+- **行情刷新分两档**（2026-09-14 新增，不得回退）：60 秒后台轮询走后端 **8 秒去抖缓存**；
+  顶栏「数据更新」按钮带 `&force=1` **强制联网全量重拉**并回写 `securities.current_price`。
+  缺了 force，按钮在 8 秒窗口内只会拿到缓存却提示"已更新"，即**语义空壳**。
+- 2026-09-14 的「数据更新」按钮是**未升版本号的功能改动**（用户明确选择"只改代码+测试"），
+  版本仍为 v1.0.10，`TARGET_SCHEMA_VERSION` 等 4 处不动。
 
 ## 环境注意
 
@@ -74,6 +79,20 @@
   或**明确**作为一次 data 提交推上去——**不要让它悄悄留在工作区**。
   另：即使 `mode=ro` 打开 WAL 库也会生成 `-shm`/`-wal`（已被 `.gitignore` 覆盖，
   `-wal` 常为 0 字节，可直接删）。
+- **agent-browser（真实浏览器验证）在本环境必须用 `batch` 驱动**：
+  ① 组合命令（`&&` 串联、`| head` 管道）极易被 SIGTERM —— 要么单命令、要么重定向到文件再读；
+  ② **单独 `open` 后页面会退回 `about:blank`**（截图全白、`eval` 读到 `bodyLen=0`），
+     整条链路必须放进**一次** `batch "cmd1" "cmd2" ...` 调用，页面状态才保持；
+  ③ `screenshot [path]` 的单参数会被当成 selector，实际存到
+     `~/.agent-browser/tmp/screenshots/`，需从该目录取回。
+- **agent 起不了"能活下去"的服务进程**（2026-09-14 实测）：进程树被 Job Object 托管
+  （kill-on-close）。`DETACHED_PROCESS` 起的服务，在调用它的脚本退出后即被回收
+  （PID 40888 / 17528 两次验证）；补 `CREATE_BREAKAWAY_FROM_JOB` → `WinError 5 拒绝访问`；
+  走 `wmic process call create` → **wmic.exe 在安全策略的程序黑名单里**，且明确禁止
+  "换 shell 或等价绕过"。**结论：不要在 agent 里替用户启动工作台**——
+  改完代码后把测试端口清干净，让用户双击 `启动工作台.bat` 自己起。
+- **`taskkill` 在 MSYS Bash 下不可用**（`//F` 报"无效参数"，`/F` 被路径转换）。
+  用 `python -c "import subprocess; subprocess.run(['taskkill','/F','/PID',pid])"`。
 - **MSYS2 版 ssh（`/usr/bin/ssh`）在中文用户名 HOME 下彻底不可用**：它把
   `HOME=/c/Users/宜春法院` 按本地 ANSI(GBK) 处理，去找
   `/c/Users/\322\313\264\272\267\250\324\272/.ssh/known_hosts`，于是**既读不到
@@ -183,6 +202,13 @@
   388 B 版本）→ 在持久 PATH 只含 Microsoft Store 存根的机器上**双击起不来工作台**。
   v1.0.10 换成 3,970 B 候选链版本（`65414590d0804b255830ce6b489e384db7501659ccb50b9ebf8c0dc64f70fb93`）。
   **不得退回 `set "PY=python"` + `where python` 的写法**；`tests/test_v110.py` §B 为此设了硬断言。
+- **顶栏「数据更新」按钮的 force 语义**（2026-09-14 新增）：后端 `get_quotes(symbols, force=True)`
+  必须 `need_list = list(need)` **绕开 8 秒缓存**（不得退回无条件去抖）；`/api/quotes` 只认
+  `force ∈ {'1','true','yes','on'}`；前端**仅** force 时拼 `&force=1`，自动轮询不带。
+  契约测试 `tests/test_data_update_btn.py`（42 断言，含真实联网 §D）；负向验证
+  `.tmp_v108x/verify/neg_data_update_btn.py`（5/5 回退变体全被捕获）；
+  真实服务端到端 `.tmp_v108x/verify/e2e_data_update_btn.py`（14 断言，**用备用端口 8799，
+  不打扰用户 8765 实例**）。
 
 ## 并发与可复现性的验证约定（v1.0.9 起）
 
