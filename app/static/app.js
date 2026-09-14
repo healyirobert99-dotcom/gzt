@@ -122,11 +122,31 @@ function txSymbol(sec) {
 }
 const quoteOf = sec => S.quotes[txSymbol(sec)] || null;
 
-async function refreshQuotes(manual) {
-  if (!S.secs.length) return;
+/* 顶栏「数据更新」按钮。
+   按钮位于 #app 之外的顶栏，render() 不会重绘它，所以忙碌态可原地安全切换。 */
+const REFRESH_LABEL = '数据更新';
+
+function setRefreshBusy(busy) {
+  const btn = $('#btn-refresh');
+  if (!btn) return;
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim() || REFRESH_LABEL;
+  btn.disabled = !!busy;
+  btn.textContent = busy ? '更新中…' : btn.dataset.label;
+}
+
+async function refreshQuotes(manual, force) {
+  if (!S.secs.length) {
+    if (manual) toast('当前没有标的，无需更新行情', true);
+    return;
+  }
+  // 手动「数据更新」必须真去联网拿最新数据，因此带 force=1 绕过后端 8 秒
+  // 行情缓存；60 秒后台轮询不带 force，复用缓存，避免无谓请求。
+  const showBusy = !!manual;
+  if (showBusy) setRefreshBusy(true);
   const symbols = [...new Set(S.secs.map(txSymbol))].join(',');
   try {
-    const data = await api('/api/quotes?symbols=' + encodeURIComponent(symbols));
+    const url = '/api/quotes?symbols=' + encodeURIComponent(symbols) + (force ? '&force=1' : '');
+    const data = await api(url);
     S.quotes = data.data || {};
     S.quoteTime = data.last_success_at || data.fetched_at || '';
     S.lastSuccessAt = data.last_success_at || '';
@@ -137,9 +157,14 @@ async function refreshQuotes(manual) {
     S.quoteError = '行情获取失败';
     S.lastError = String(e.message || e);
     S.lastErrorAt = nowHHMMSS();
+  } finally {
+    if (showBusy) setRefreshBusy(false);
   }
   updateQuoteStatus();
-  if (manual) toast(S.quoteError ? '行情已刷新，但接口出现错误' : '行情已刷新');
+  if (manual) {
+    if (S.quoteError) toast('数据更新失败：' + String(S.quoteError).slice(0, 48), true);
+    else toast('数据已更新 · ' + (S.lastSuccessAt || '—'));
+  }
   render();
 }
 function nowHHMMSS() {
@@ -1813,7 +1838,7 @@ function renderImportExecDone(el) {
 /* ===== 启动 ===== */
 (async function init() {
   window.addEventListener('hashchange', render);
-  $('#btn-refresh').addEventListener('click', () => refreshQuotes(true));
+  $('#btn-refresh').addEventListener('click', () => refreshQuotes(true, true));
   $('#btn-settings').addEventListener('click', openSettingsModal);
   try { await loadAll(); } catch (e) { /* 首页会显示错误 */ }
   await render();

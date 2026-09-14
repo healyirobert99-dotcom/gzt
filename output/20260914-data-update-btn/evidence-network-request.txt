@@ -1,0 +1,12 @@
+✓ A/H 投研交易工作台
+  http://127.0.0.1:8799/#/home
+
+✓ Done
+
+✓ Request log cleared
+
+✓ Done
+
+✓ Done
+
+[24488.12] GET http://127.0.0.1:8799/api/quotes?symbols=sz300628%2Chk02020%2Chk01357%2Chk09980%2Csh688208%2Csz301031%2Csz300750%2Csh601899%2Chk06680%2Csz300693%2Csz002270%2Csh600309%2Csh605020%2Chk01318%2Csz000960%2Csh688188&force=1 (Fetch) 200

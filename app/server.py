@@ -1362,7 +1362,7 @@ def _persist_quotes_to_db(fetched):
     return n
 
 
-def get_quotes(symbols):
+def get_quotes(symbols, force=False):
     """拉取/返回行情快照。
 
     v1.0.6 行情一致性修复：
@@ -1373,6 +1373,12 @@ def get_quotes(symbols):
       把本次视为"行情获取失败"，返回 error 非空。
     - 部分成功 → 返回 partial_failure=True + missing_symbols 列表。
     - 持久化只针对本次新成功返回的行情；stale 行情不动 DB。
+
+    force 参数（顶栏「数据更新」按钮，本次新增）：
+      默认 False —— 8 秒内同一 symbol 复用缓存，供 60 秒后台轮询使用，省流量。
+      显式 True  —— 忽略缓存窗口，对本次请求的**全部** symbol 重新联网拉取。
+                    没有这一条，手动点按钮会拿到几秒前的缓存却提示"已更新"，
+                    按钮就成了没有语义的空壳。
     """
     result = {}
     need = list(symbols)
@@ -1389,7 +1395,11 @@ def get_quotes(symbols):
         last_error_at = _quote_cache.get('last_error_at')
 
     stale_window = time.time() - cache_ts > 8 if cache_ts else True
-    need_list = [s for s in need if stale_window or s not in cached_snapshot]
+    if force:
+        # 手动「数据更新」：忽略 8 秒缓存窗口，本次请求的全部 symbol 一律重拉。
+        need_list = list(need)
+    else:
+        need_list = [s for s in need if stale_window or s not in cached_snapshot]
 
     # 2) 拉取本次真正需要请求的 symbol
     if need_list:
@@ -3244,7 +3254,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(get_execution(int(seg[2])))
             if seg[:2] == ['api', 'quotes']:
                 syms = [s for s in qs.get('symbols', [''])[0].split(',') if s]
-                return self._json(get_quotes(syms))
+                # 手动「数据更新」：force=1 时绕过后端 8 秒行情缓存，强制联网重拉。
+                force = (qs.get('force', [''])[0] or '').strip().lower() in ('1', 'true', 'yes', 'on')
+                return self._json(get_quotes(syms, force=force))
             if seg == ['api', 'settings']:
                 return self._json(get_settings())
             return self._err('not found', 404)
