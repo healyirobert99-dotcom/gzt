@@ -52,6 +52,15 @@
      读不到折叠行）→ 先 `click ...>summary` 展开再读；
   ⑩ 读数块**不能用「第 N 个 ✓ Done」定位**（`mouse move` / `wait` 不一定输出 ✓ Done）。
      按内容特征取：纯整数块 / 最后一个含 `opacity:` 的块 / 最后一个非纯数字文本块。
+  ⑪ **一次 batch 的多条命令，输出会被合并进同一个块** —— `✓ Done` 并非每命令一枚。
+     探针实测 3 个 `get count` + 1 个 `get text` 的输出挤成一块
+     `'\n\n17\n\n0\n\n06:10\n\n17\n'`。后果：沿用「块内容恰好是数字」的解析会在
+     **count 不在批次末尾时静默取错值**（本轮边界检查因此 4 条断言假红 ——
+     `card=17` / `btn=None` / `drawer=None`，而同一批次的**文本证据全 PASS**，
+     极易误判成产品坏了）。**对策：`get count` 独占一个批次**（不与 `get text` 混，
+     否则文本里的纯数字行会污染读数），再**按行**收纯整数行 ——
+     参考实现 `browser_e2e_archive.py` 的 `count_values()`（`0` 也会照常输出，
+     能如实区分「一个都没有」与「读数失败」）。
 - **用 Python 驱动 agent-browser 时有两处必踩**（2026-09-15）：
   ① `agent-browser` 是 sh 垫片，Windows 下 `subprocess` 直接调它 →
      `FileNotFoundError [WinError 2]`。**须直调**
