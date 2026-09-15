@@ -1,0 +1,48 @@
+归档边界检查: 第七面「连点两下提交」(§D#14/#14b) + 12 次注入负向验证
+
+一、为什么要查这一面
+前六个面（语义/幂等、极端态与路由、被过滤集合、导入流程、行情兜底、键盘可达性）
+都没覆盖「同一个弹窗里手快连点两下提交」。归档/恢复每次追加 1 条 decision_ledger，
+属 append-only 写入，重复提交就可能双写。
+
+二、机制
+openModal 的提交回调没有在途守卫：不 disable 提交按钮、无 in-flight 标志，
+两次 submit 事件会派发两次请求，而 .mfoot>button.primary 一直可用。
+
+三、探针结论（probe_double_submit.py，只读，对沙箱库）
+- 添加决策记录（append-only）连点两下 → 台账 2 → 4（增量 2）  ← 真缺陷（属其它功能）
+- 归档（幂等，对照组）连点两下 → 台账 92 → 93（增量 1）
+  toast: 已归档 · 柏楚电子 / 柏楚电子 本就处于归档状态
+归档/恢复因两道机制叠加而免疫：
+① 后端 _set_archived_at 的 changed 守卫（第二次直接返回 changed=false，不写库不追加台账）；
+② 前端按 changed 分流文案，第二次不谎报；恢复侧则在弹窗打开前先查 im.is_archived。
+
+四、固化契约（131 → 133 断言）
+§D#14   归档 toast 按 changed 分流（true →「已归档 · X」；false →「X 本就处于归档状态」）
+§D#14b  恢复弹窗先查真实归档态再放行（前提不成立只提示、不发请求）
+
+五、负向验证（neg_archive_import_contract.py 扩到 12 次注入 / 24 断言）
+M11 归档 toast 恒定报「已归档」 → §D#14 翻红
+M12 去掉恢复弹窗前提守卫        → §D#14b 翻红
+结果 24 PASS / 0 FAIL，两次注入均命中目标断言且能跑到汇总行。
+
+六、测法陷阱（已记 ENV-TRAPS ⑮ / 技能陷阱表）
+不能用 dblclick 测连点两下：Playwright 会合成为单个 detail=2 的 click 事件，
+首跑实测只 +1，差点把真缺陷读成「无缺陷」。必须发两次独立 click，以后端终态下结论。
+
+七、本轮回归
+离线全套 691 → 693 PASS / 0 FAIL（11 套件逐套与基线一致，run_all_tests.py 基线 131 → 133）
+浏览器四套：E2E 38/38、边界 37/37、键盘 24/24、A/H 11/11
+进程内 check_archive_import 38/38；并发 concurrency_archive_probe 12/12
+负向 neg_archive_import_contract 24/24、neg_findsec_browser 6/6、neg_keyboard_browser 11/11
+真实库 SHA-256 全程 4f4832aa51d00b51…；8765/8805/8799 全空闲；未升版本号、未改产品代码。
+
+八、记忆/技能同步
+MEMORY.md 超限瘦身 11474 → 7658 字节（细则下沉 DEFECTS/ENV-TRAPS/技能）
+DEFECTS.md 新增「连点两下不得谎报、不得双写」条；ENV-TRAPS 新增 ⑮
+技能 ah-workbench-feature-verify 1.7.0 → 1.8.0（新增第 3.9 步 · 重复提交探针）
+
+九、遗留开放项（未擅自改，待用户拍板）
+1) 命令面板 Ctrl+K 搜不到已归档标的
+2) 导入对已归档标的「静默成功」的两处文案缺口
+3) 其它 append-only 弹窗（添加决策记录/录交易/执行）连点两下双写 —— 属其它功能

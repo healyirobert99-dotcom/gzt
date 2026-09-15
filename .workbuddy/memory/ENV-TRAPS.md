@@ -174,3 +174,19 @@
    `get count` 仍是唯一必须**独占批次**的命令（见 ⑪）。
 3. 另：`focus` 后读 `opacity` 要 `wait` 一拍——`transition .16s`，
    立刻读会拿到过渡中间值 `0`。
+
+## ⑮ 测「连点两下提交」**不能用 `dblclick`**
+
+2026-09-15 实测：`dblclick <选择器>` 会被 Playwright 合成**单个** `detail=2` 的 click
+事件 —— 页面只收到**一次** `submit`，台账只 **+1**。首跑据此得出"无缺陷"，是**假绿**。
+
+**对策：发两次独立的 `click`**（同一次 batch 内、紧挨着），才能真实复现"手快连点"：
+
+```
+click .mfoot>button.primary
+click .mfoot>button.primary
+eval String(document.getElementById(String.fromCharCode(...)).textContent)
+```
+
+同理，凡"重复提交 / 双击 / 连点"类断言，都要先确认**事件真的派发了 n 次**
+（读后端终态或计数），再用后端终态而不是 UI 读数下结论。

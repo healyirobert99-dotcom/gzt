@@ -8,11 +8,11 @@
 
 - 2026-09-14 顶栏「数据更新」按钮：`tests/test_data_update_btn.py`（42）+ 负向
   `neg_data_update_btn.py` + 端到端 `e2e_data_update_btn.py`。
-- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（131）+
+- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（133）+
   浏览器 `browser_e2e_archive.py`（38）/ `browser_e2e_archive_edge.py`（37）/
   `browser_e2e_archive_keyboard.py`（24，纯键盘路径）/ `check_ah_link_archive.py`（11）+
   进程内 `check_archive_import.py`（38）+ 并发 `concurrency_archive_probe.py`（12）+
-  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`（20，10 次注入）/
+  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`（24，12 次注入）/
   `neg_findsec_browser.py`（6）/ `neg_keyboard_browser.py`（11）。
 
 ## v1.0.9（封板，R-027 / R-028）
@@ -68,7 +68,7 @@
   绝不复活归档、不改写时间戳、不伪造归档/恢复事件。`archived_at` 全项目**只有 1 个写入口**
   `_set_archived_at`。锁 `§D#11`（6 条）；进程内证据 `check_archive_import.py`（38，含真实仓库版
   DB 快照上"init_db 幂等补列且不触发 do_migration"）；负向 `neg_archive_import_contract.py`
-  （6 次注入全部按预期翻红，含 §D#10d/e 两次）。
+  （12 次注入全部按预期翻红，含 §D#10d/e、§D#13~#13c、§D#14/#14b）。
 - **归档标的的行情必须走兜底**：行情只对 `S.secs` 拉取 → 已归档标的 `quoteOf()` 返回 null，
   全部渲染点（含详情抽屉）须有「暂无行情」兜底，`uiMiniChart` 须判空（否则整抽屉渲染崩）。
   锁 `§D#12`（3 条）。
@@ -79,6 +79,16 @@
   锁 `§D#13~#13c`（3 条）+ 浏览器 `browser_e2e_archive_keyboard.py`（24，Tab→Enter→Enter
   纯键盘走完归档+恢复）；负向 `neg_keyboard_browser.py`（11）：删掉 ② → §K3#2/#3 红且
   下面一切照旧；加 `tabindex="-1"` → §K3#1 红且**键盘完全无法归档**（台账一条不动）。
+- **连点两下提交不得谎报、不得双写**（2026-09-15）：`openModal` 的提交回调**没有在途守卫**
+  （不 disable 提交按钮、无 in-flight 标志）→ 连点两下会派发两次请求。归档/恢复因**后端幂等**
+  （`_set_archived_at` 的 `changed` 守卫）+ **前端按 `changed` 分流文案**而免疫：
+  第一次「已归档 · X」、第二次「X 本就处于归档状态」；恢复侧则在弹窗**打开前**先查
+  `im.is_archived`，不成立只提示、不发请求。锁 `§D#14`（toast 按 changed 分流）
+  + `§D#14b`（恢复弹窗前提守卫）；负向 M11/M12 两次注入均按预期翻红。
+  - **探针副产物（不属本功能，未擅自改）**：`openNoteModal`（添加决策记录，append-only）
+    连点两下**台账 +2**（录交易 / 执行同构）。已记入 `MEMORY.md` 开放项，待用户拍板。
+    测法铁律：**必须发两次独立 `click`** —— `dblclick` 会被 Playwright 合成**单个** click
+    事件（`detail=2`），实测只 +1，会把真缺陷误判成"无缺陷"。
 
 ## 已**验证为安全**、并锁成不变式（不是缺陷，但回退就会翻红）
 

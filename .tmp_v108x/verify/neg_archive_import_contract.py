@@ -24,6 +24,10 @@
 最后两个注入（对应 §D#13b / §D#13c，× 的键盘可达性）：
   M9  删掉 :focus-visible 的显形声明 → 键盘用户再也看不到 ×
   M10 给 × 加 tabindex="-1" → Tab 序跳过它，键盘无法归档
+
+再两个注入（对应 §D#14 / §D#14b，连点两下提交）：
+  M11 归档 toast 恒定报「已归档」→ 连点两下会谎报第二次归档
+  M12 去掉恢复弹窗的前提守卫 → 对未归档标的也会发恢复请求
 """
 import os
 import re
@@ -162,6 +166,23 @@ def _impact_after(sid):""",
         old='<button type="button" class="card-archive" data-archive-id="${s.id}"',
         new='<button type="button" tabindex="-1" class="card-archive"'
             ' data-archive-id="${s.id}"',
+    ),
+    dict(
+        key='M11',
+        expect='§D#14 归档 toast 按 changed 分流',
+        desc='归档 toast 恒定报「已归档」（连点两下会谎报第二次归档）',
+        target='app/static/app.js',
+        old="    toast(res.changed ? ('已归档 · ' + res.name) : "
+            "(res.name + ' 本就处于归档状态'));",
+        new="    toast('已归档 · ' + res.name);",
+    ),
+    dict(
+        key='M12',
+        expect='§D#14b 恢复弹窗先查真实归档态再放行',
+        desc='去掉恢复弹窗的前提守卫（对未归档标的也会发恢复请求）',
+        target='app/static/app.js',
+        old="  if (!im.is_archived) { toast('该标的当前未归档'); return; }",
+        new='  /* 注入：去掉前提守卫 */',
     ),
 ]
 

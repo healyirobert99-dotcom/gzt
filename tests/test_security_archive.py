@@ -851,6 +851,23 @@ def test_d_frontend_contract():
          m_html is not None and 'tabindex' not in m_html.group(1),
          'attrs=%r' % (m_html.group(1)[:120] if m_html else None))
 
+    # D14 归档/恢复弹窗对"无实际变化"与"前提不成立"的处理
+    # 由连点两下提交的探针（probe_double_submit.py）驱动：`openModal` 没有在途守卫，
+    # 连点两下会派发两次请求。归档**因此必须**依赖后端幂等 + 前端按 changed 分流文案，
+    # 否则第二次会给用户"谎报一次归档"。实测：归档连点两下台账只 +1
+    # （toast 依次「已归档 · X」→「X 本就处于归档状态」）；
+    # 而"添加决策记录"连点两下台账 **+2**（该缺陷不属于本功能，已另记开放项）。
+    step('§D#14 归档 toast 按 changed 分流：true →「已归档 · X」；false →「X 本就处于归档状态」'
+         '（连点两下不谎报第二次归档）',
+         re.search(r"toast\(res\.changed \? \('已归档 · ' \+ res\.name\) : "
+                   r"\(res\.name \+ ' 本就处于归档状态'\)\)", js) is not None)
+    m_rst = re.search(r'async function openRestoreModal\(id\) \{(.*?)\n\}', js, re.S)
+    rst_body = m_rst.group(1) if m_rst else ''
+    step('§D#14b 恢复弹窗先查真实归档态再放行（前提不成立时只提示、不发请求）',
+         'archive-impact' in rst_body and "if (!im.is_archived)" in rst_body
+         and '该标的当前未归档' in rst_body,
+         'body=%r' % rst_body[:120])
+
     # D11 归档 × 导入路径（服务端同型面）
     # 「被过滤集合」检查法的第三个面：导入流程按 exchange+code 匹配标的。
     # 结论：匹配**不应**按归档过滤（身份只认 exchange+code），但导入也**绝不能**
