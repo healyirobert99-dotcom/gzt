@@ -1,0 +1,48 @@
+归档边界检查: 补"纯键盘路径"(§D#13~#13c) + 键盘可达性负向验证
+
+此前所有 E2E 都只用 click —— Playwright 点击前会替元素补 hover, 于是
+:focus-visible / Tab 序 / Enter 激活这三件事一次都没被验过。而 CSS 里恰恰有
+三条只对键盘生效的规则, 任缺一条键盘用户就够不到那个「×」。
+
+结论: 键盘路径完全通, 无缺陷。
+
+新增 .tmp_v108x/verify/browser_e2e_archive_keyboard.py (24 断言, 无一次 click):
+- §K1 17 张卡 / 17 个 ×(一一对应)
+- §K2 未悬停/未聚焦时 opacity:0 + pointer-events:none
+- §K3 从卡片按 Tab 能走到 ×(activeElement.className == card-archive, tag BUTTON),
+      聚焦后 opacity:1 且 pointer-events:auto
+- §K4 aria-label == "归档 宁德时代"; 聚焦后 Enter 真的打开「归档标的」弹窗
+      (证明页面级 keydown 的 Enter 守卫没吞掉它), 且身份不串标的
+- §K5 Escape 关闭弹窗且没有任何标的被归档(取消是安全的)
+- §K6 纯键盘完成归档: × → Enter →(焦点自动落到输入框)→ Enter
+      => 卡片 17→16, 台账 +1, 后端确认恰好 1 只归档
+- §K7 键盘完成恢复: 展开折叠区 → 聚焦「恢复」 → Enter → Enter => 归档归零
+- §K8 台账恰好 +2; 真实库逐字节未变
+
+新增离线契约 tests/test_security_archive.py §D#13~#13c (128 -> 131):
+- §D#13  × 默认 opacity:0 + pointer-events:none(悬停才出现)
+- §D#13b :focus-visible 必须同时给出 opacity:1 与 pointer-events:auto
+         (只管透明度会让键盘"看得见却点不动")
+- §D#13c × 按钮不得带 tabindex="-1"
+
+负向验证:
+- 新增 neg_keyboard_browser.py(11 断言, 浏览器层):
+  N1 删掉 :focus-visible 的显形声明 => §K3#2(opacity '0')/§K3#3(pe 'none') 红,
+     而 §K3#1(Tab 序) 仍绿 —— 说明断言切分得准, 不是"一片红"
+  N2 给 × 加 tabindex="-1" => §K3#1 红(Tab 落到下一张卡, tag ARTICLE) 并连带
+     11 条下游红: 键盘完全无法归档, 台账 94 -> 94 一条没动
+  两轮对照组 §K1#2 / §K2#2 均保持绿; 注入后就地还原 style.css/app.js 并逐字节核对
+- neg_archive_import_contract.py 扩到 10 次注入 / 20 断言(新增 M9/M10 离线版)
+
+读数第二次假红(已修, 值得记): 键盘脚本首跑 8 条 FAIL, 实为读数解析问题 ——
+① eval 参数里任何引号(单/双)都会被 CLI 吃掉(.card-archive 退化成裸 token;
+   双引号版变成 card - archive 被当减法);
+② 一次 batch 命令一多(>6~7 条)输出会被合并, 按块切分会丢读数。
+修法: eval 里不写引号 —— 先 focus <选择器> 再读 document.activeElement.*;
+eval 一律包 String(...) 使返回值必带引号, 用整串正则取值。已写入 ENV-TRAPS ⑭。
+
+数字: 离线全套 688 -> 691 PASS / 0 FAIL, 11 套件逐套与基线一致;
+浏览器四套 E2E 38/38, 边界 37/37, 键盘 24/24, A/H 11/11;
+进程内 38/38, 并发 12/12, 负向 20/20 + 6/6 + 11/11;
+真实库 SHA-256 全程 4f4832aa51d00b51...
+未升版本号(用户拍板只改代码+测试), 故不出交付包。

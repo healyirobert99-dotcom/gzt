@@ -152,4 +152,25 @@
 `.tmp_v108x/verify/browser_e2e_archive.py`**（`count_values` / `text_blocks` / `text_with`），
 三份浏览器脚本 import 复用，**禁止各自复制一份**（复制必然漂移）。
 另：新增断言的负向验证用"复制仓库 → 注入真实缺陷 → 要求目标标签 FAIL"，
-模板见 `neg_archive_import_contract.py`（4 注入 / 8 断言）。
+模板见 `neg_archive_import_contract.py`（10 注入 / 20 断言）。
+
+## ⑭ agent-browser：`eval` **不能含引号**，且命令一多块划分就失效
+
+2026-09-15 实测两条，合起来会让读数**假红**：
+
+1. **`eval` 的参数里任何引号（单/双）都会被 CLI 吃掉**：
+   `eval document.querySelector('.card-archive')` 送到浏览器变成
+   `document.querySelector(.card-archive)` → `SyntaxError: Unexpected token '.'`；
+   用双引号则变成 `getElementsByClassName(card-archive)` →
+   `ReferenceError: card is not defined`（`card - archive` 被当减法）。
+   **对策：不写引号**——先 `focus <选择器>`（选择器是独立 argv，不受影响），
+   然后用 `document.activeElement.*` 读数；必须写字面量时用
+   `String.fromCharCode(46,99,97,…)`。`eval` 一律包 `String(...)`，
+   返回值必带双引号，便于用**整串正则** `re.findall(r'"([^"\n]*)"', out)` 取值
+   （含空串，下标对齐稳定）。
+2. **一次 batch 里命令一多（>6~7 条），输出会被合并成大块**，
+   按 `✓ Done` 切块（`text_blocks`）会**丢读数**——本会话因此 8 条断言假红。
+   命令少时切块正常，命令多时必须回到「整串正则 / 整串子串判断」。
+   `get count` 仍是唯一必须**独占批次**的命令（见 ⑪）。
+3. 另：`focus` 后读 `opacity` 要 `wait` 一拍——`transition .16s`，
+   立刻读会拿到过渡中间值 `0`。

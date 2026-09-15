@@ -97,8 +97,12 @@
 2. **负向验证**：新断言必须"反向打坏"确认会红（`.tmp_v108x/verify/neg_*.py`）。
 3. **真实浏览器**（真实服务 + 真实 Chromium，沙箱端口 8805，库用副本）：
    `browser_e2e_archive.py`（38）+ `browser_e2e_archive_edge.py`（37）+
-   `check_ah_link_archive.py`（11）；起服务 `sandbox_server.py 8805`（后台任务），收尾
-   `kill_port.py 8805` 按端口杀进程树。**先读 `ENV-TRAPS.md` ⑪⑩⑦⑤④，别先怀疑产品。**
+   `browser_e2e_archive_keyboard.py`（24，**纯键盘路径**）+ `check_ah_link_archive.py`（11）；
+   起服务 `sandbox_server.py 8805`（后台任务），收尾 `kill_port.py 8805` 按端口杀进程树。
+   **先读 `ENV-TRAPS.md` ⑫⑪⑩⑦⑤④，别先怀疑产品。**
+   **鼠标点击 ≠ 键盘可达**：所有 `click` 路径下 Playwright 会替元素补 hover，
+   `:focus-visible` / Tab 序 / Enter 激活这三件事**永远不会被覆盖** —— 每有新交互控件都要
+   单独跑一次键盘路径（Tab 到 → Enter 激活 → Escape 取消）。
 4. **进程内探针**（不起服务）：monkeypatch `server.DB_PATH` 到真实库副本，**真实库 SHA-256
    前后必须一致**（当前 `4f4832aa51d00b51…`）。
 5. **并发探针**（append-only / token 类改动必跑）：线程池 + `Barrier` 同时打同一条路径，

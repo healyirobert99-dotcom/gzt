@@ -20,6 +20,10 @@
 再两个注入（对应 §C#15 / §C#15b，并发 append-only 台账）：
   M7  去掉 _set_archived_at 的幂等守卫 → 并发下重复追加「标的归档」
   M8  写了台账却返回 changed=False → 幽灵行（写了却不报告）
+
+最后两个注入（对应 §D#13b / §D#13c，× 的键盘可达性）：
+  M9  删掉 :focus-visible 的显形声明 → 键盘用户再也看不到 ×
+  M10 给 × 加 tabindex="-1" → Tab 序跳过它，键盘无法归档
 """
 import os
 import re
@@ -139,6 +143,25 @@ def _impact_after(sid):""",
             'name': sec['name'], 'code': sec['code'], 'exchange': sec['exchange']}""",
         new="""    return {'changed': False, 'security_id': sid, 'archived_at': value,
             'name': sec['name'], 'code': sec['code'], 'exchange': sec['exchange']}""",
+    ),
+    dict(
+        key='M9',
+        expect='§D#13b × 聚焦时重新显形并可点',
+        desc='删掉 :focus-visible 的显形声明（键盘用户再也看不到 ×）',
+        target='app/static/style.css',
+        old='.card-archive:focus-visible { opacity: 1; pointer-events: auto; '
+            'outline: none; border-color: var(--accent); }',
+        new='.card-archive:focus-visible { outline: none; '
+            'border-color: var(--accent); }',
+    ),
+    dict(
+        key='M10',
+        expect='§D#13c × 按钮未带 tabindex="-1"',
+        desc='给 × 加 tabindex="-1"（Tab 序直接跳过它）',
+        target='app/static/app.js',
+        old='<button type="button" class="card-archive" data-archive-id="${s.id}"',
+        new='<button type="button" tabindex="-1" class="card-archive"'
+            ' data-archive-id="${s.id}"',
     ),
 ]
 

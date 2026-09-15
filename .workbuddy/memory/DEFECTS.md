@@ -8,12 +8,12 @@
 
 - 2026-09-14 顶栏「数据更新」按钮：`tests/test_data_update_btn.py`（42）+ 负向
   `neg_data_update_btn.py` + 端到端 `e2e_data_update_btn.py`。
-- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（128）+
+- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（131）+
   浏览器 `browser_e2e_archive.py`（38）/ `browser_e2e_archive_edge.py`（37）/
-  `check_ah_link_archive.py`（11）+ 进程内 `check_archive_import.py`（38）+
-  并发 `concurrency_archive_probe.py`（12）+ 负向 `neg_security_archive.py` /
-  `neg_archive_import_contract.py`（16，8 次注入）/
-  `neg_findsec_browser.py`（6，浏览器层回退 findSec → §E7#1~3 + §E8#1~4 共 7 条翻红）。
+  `browser_e2e_archive_keyboard.py`（24，纯键盘路径）/ `check_ah_link_archive.py`（11）+
+  进程内 `check_archive_import.py`（38）+ 并发 `concurrency_archive_probe.py`（12）+
+  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`（20，10 次注入）/
+  `neg_findsec_browser.py`（6）/ `neg_keyboard_browser.py`（11）。
 
 ## v1.0.9（封板，R-027 / R-028）
 
@@ -72,6 +72,13 @@
 - **归档标的的行情必须走兜底**：行情只对 `S.secs` 拉取 → 已归档标的 `quoteOf()` 返回 null，
   全部渲染点（含详情抽屉）须有「暂无行情」兜底，`uiMiniChart` 须判空（否则整抽屉渲染崩）。
   锁 `§D#12`（3 条）。
+- **「×」必须键盘可达**（2026-09-15）：三条只对键盘生效的不变式，缺任一条键盘用户就够不到 ×：
+  ① `.card-archive` 默认 `opacity:0 + pointer-events:none`（鼠标路径：悬停才出现）；
+  ② `.card-archive:focus-visible` 必须**同时**给出 `opacity:1` 与 `pointer-events:auto`
+  （只管 opacity 会让键盘 Tab 到却点不动）；③ × 按钮**不得**带 `tabindex="-1"`。
+  锁 `§D#13~#13c`（3 条）+ 浏览器 `browser_e2e_archive_keyboard.py`（24，Tab→Enter→Enter
+  纯键盘走完归档+恢复）；负向 `neg_keyboard_browser.py`（11）：删掉 ② → §K3#2/#3 红且
+  下面一切照旧；加 `tabindex="-1"` → §K3#1 红且**键盘完全无法归档**（台账一条不动）。
 
 ## 已**验证为安全**、并锁成不变式（不是缺陷，但回退就会翻红）
 

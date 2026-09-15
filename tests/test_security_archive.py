@@ -826,6 +826,31 @@ def test_d_frontend_contract():
          '透传项=%d 个'
          % len(re.findall(r'onclick="closeModal\(\);open\w+Modal\(\$\{id\}\)"', more)))
 
+    # D13 「×」的**键盘可达性**（此前所有端到端都只用鼠标 click，这一面零覆盖）
+    # 三条只对键盘生效的规则，缺任一条键盘用户就够不到「×」：
+    #   ① 默认 opacity:0 + pointer-events:none（悬停才出现 —— 鼠标路径的设计）；
+    #   ② `:focus-visible` 必须把它重新显形并恢复可点；
+    #   ③ 按钮不得带 tabindex="-1"（否则 Tab 序直接跳过它）。
+    # 动态证据：browser_e2e_archive_keyboard.py（24 断言，Tab→Enter→Enter 纯键盘走完
+    # 归档+恢复）；负向 neg_keyboard_browser.py：删掉 ② → §K3#2/#3 红；
+    # 加 tabindex="-1" → §K3#1 红且键盘**完全无法归档**（台账一条不动）。
+    css = read_text('app/static/style.css')
+    m_btn = re.search(r'\n\.card-archive \{(.*?)\n\}', css, re.S)
+    btn_rule = m_btn.group(1) if m_btn else ''
+    m_fv = re.search(r'\.card-archive:focus-visible \{([^}]*)\}', css)
+    fv_rule = m_fv.group(1) if m_fv else ''
+    step('§D#13 × 默认不可见且不可点（opacity:0 + pointer-events:none —— 悬停才出现）',
+         'opacity: 0' in btn_rule and 'pointer-events: none' in btn_rule,
+         'rule=%r' % btn_rule[:120])
+    step('§D#13b × 聚焦时重新显形并可点（:focus-visible → opacity:1 + pointer-events:auto）'
+         '—— 少了这条键盘用户就够不到「×」',
+         'opacity: 1' in fv_rule and 'pointer-events: auto' in fv_rule,
+         'rule=%r' % fv_rule[:140])
+    m_html = re.search(r'<button type="button"([^>]*class="card-archive")', js)
+    step('§D#13c × 按钮未带 tabindex="-1"（否则 Tab 序会跳过它，键盘永远够不到）',
+         m_html is not None and 'tabindex' not in m_html.group(1),
+         'attrs=%r' % (m_html.group(1)[:120] if m_html else None))
+
     # D11 归档 × 导入路径（服务端同型面）
     # 「被过滤集合」检查法的第三个面：导入流程按 exchange+code 匹配标的。
     # 结论：匹配**不应**按归档过滤（身份只认 exchange+code），但导入也**绝不能**
