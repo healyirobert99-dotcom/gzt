@@ -18,7 +18,7 @@ PRAGMA foreign_keys=ON；而 decision_ledger 是 append-only、必须保留"当�
       init_db 的幂等补列落地 —— 这是本改动最容易漏的地方（迁移会被整体跳过）
   §C  HTTP 层（真实 ThreadingHTTPServer）：?archived= 白名单、404/400、影响面接口
   §D  前端静态契约：× 在右上角、默认不可见、悬停显形、阻止冒泡、影响面弹窗、
-      键盘守卫（Enter 不得吞掉按钮点击）
+      键盘守卫（Enter 不得吞掉按钮点击）、**归档不得连带丢掉 A/H 关联**（§D#9）
 
 本文件是功能测试，不写真实 data/workbench.db。
 """
@@ -710,6 +710,26 @@ def test_d_frontend_contract():
          'confirm(' not in js)
     step('§D#8c 未新增文件拖拽 / Markdown 解析等被明令不实现的能力',
          'drop(' not in js and 'marked' not in js)
+
+    # D9 归档 × A/H 关联：不得连带把关联丢掉
+    # 根因：S.secs 不含已归档标的。若 A/H 下拉只照 S.secs 生成，被归档的关联标的
+    # 就不在选项里，浏览器会回落到首项「— 无 —」，用户只改行业/备注再保存
+    # 就会把 ah_link_id 静默写成 NULL（实测见 .tmp_v108x/verify/check_ah_link_archive.py，
+    # 修正前 11 断言里 4 条红、其中 3 条是决定性证据）。
+    m_basic = re.search(r'function openBasicModal\(id\) \{(.*?)\nfunction ', js, re.S)
+    basic = m_basic.group(1) if m_basic else ''
+    step('§D#9 A/H 下拉的候选项回退到「已归档」列表（不再只有 S.secs）',
+         len(basic) > 0 and 'S.archived' in basic and 'ahOptions' in basic,
+         'body 长度=%d' % len(basic))
+    step('§D#9b 被归档的关联项明确标注「· 已归档」',
+         '· 已归档' in basic)
+    step('§D#9c 兜底仅在「当前已关联、且该关联不在活跃列表」时生效（不无条件塞入已归档标的）',
+         '!others.some(o => o.id === s.ah_link_id)' in basic)
+    step('§D#9d 下拉选项统一由 ahOptions 生成',
+         "${ahOptions.join('')}" in basic)
+    step('§D#9e 标的库的 A/H 关联显示同样回退到已归档列表并标注',
+         re.search(r'const o = inActive \|\| \(S\.archived \|\| \[\]\)\.find', js)
+         is not None and '（已归档）' in js)
 
 
 if __name__ == '__main__':

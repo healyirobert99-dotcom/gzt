@@ -469,8 +469,10 @@ async function renderDetail(el, id) {
 
   let ahHtml = '';
   if (s.ah_link_id) {
-    const o = S.secs.find(x => x.id === s.ah_link_id);
-    if (o) ahHtml = ` · A/H 关联：<a href="#/s/${o.id}">${esc(o.name)}（${esc(o.code)}.${esc(o.exchange)}）</a>`;
+    // 关联标的可能已被归档（不在 S.secs 里）—— 两处都查，否则关联说明会凭空消失。
+    const inActive = S.secs.find(x => x.id === s.ah_link_id);
+    const o = inActive || (S.archived || []).find(x => x.id === s.ah_link_id);
+    if (o) ahHtml = ` · A/H 关联：<a href="#/s/${o.id}">${esc(o.name)}（${esc(o.code)}.${esc(o.exchange)}）</a>${inActive ? '' : '（已归档）'}`;
   }
 
   /* 价格区间事实 */
@@ -875,10 +877,17 @@ function openStatusModal(id) {
 function openBasicModal(id) {
   const s = findSec(id); if (!s) return;
   const others = S.secs.filter(x => x.id !== s.id);
+  // 已归档的关联标的必须仍作为候选项保留：它不在 S.secs 里，若只照 S.secs 生成下拉，
+  // 浏览器会回落到首项「— 无 —」，用户只是改个行业/备注再保存，就会把 A/H 关联
+  // **静默清空**（归档功能引入的回归，实测见 .tmp_v108x/verify/check_ah_link_archive.py）。
+  const ahOptions = others.map(o => `<option value="${o.id}"${s.ah_link_id === o.id ? ' selected' : ''}>${esc(o.name)}（${esc(o.code)}.${esc(o.exchange)}）</option>`);
+  const linkedArchived = (s.ah_link_id && !others.some(o => o.id === s.ah_link_id))
+    ? (S.archived || []).find(x => x.id === s.ah_link_id) : null;
+  if (linkedArchived) ahOptions.push(`<option value="${linkedArchived.id}" selected>${esc(linkedArchived.name)}（${esc(linkedArchived.code)}.${esc(linkedArchived.exchange)}）· 已归档</option>`);
   openModal('编辑基本信息 · ' + s.name, `
     ${fld('公司名称', `<input name="name" required value="${esc(s.name)}">`, true)}
     ${fld('行业 / 主题', `<input name="sector" value="${esc(s.sector || '')}">`)}
-    ${fld('A/H 两地上市关联', `<select name="ah_link_id"><option value="">— 无 —</option>${others.map(o => `<option value="${o.id}"${s.ah_link_id === o.id ? ' selected' : ''}>${esc(o.name)}（${esc(o.code)}.${esc(o.exchange)}）</option>`).join('')}</select>`)}
+    ${fld('A/H 两地上市关联', `<select name="ah_link_id"><option value="">— 无 —</option>${ahOptions.join('')}</select>`)}
     ${fld('备注', `<textarea name="notes">${esc(s.notes || '')}</textarea>`)}
   `, async fd => {
     await api(`/api/securities/${id}`, {
