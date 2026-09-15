@@ -65,6 +65,23 @@ def unarchive_all(ids):
     return ok
 
 
+def drawer_action_batch(sid, nth, wait_ms=7000):
+    """打开指定标的的详情抽屉 → 点操作区第 nth 个按钮 → 读弹窗文本。
+
+    每次先 close_all()：上一批次的弹窗若不关，遮罩会挡住抽屉里的按钮，点击落空、
+    读 `.modal` 变成「Element not found」—— 一次纯**装置性**误报（本轮踩过）。
+    """
+    close_all()
+    return batch('set viewport 1280 1300', 'open %s/#/s/%d' % (BASE, sid),
+                 'wait %d' % wait_ms,
+                 'click .drawer-actions>button:nth-child(%d)' % nth,
+                 'wait 2000', 'get text .modal')
+
+
+def modal_text(out):
+    return '\n'.join(text_blocks(out))
+
+
 def main():
     print('=' * 78)
     print('真实服务 8805 + 真实 Chromium —— 归档功能**边界检查**')
@@ -167,6 +184,21 @@ def main():
          '更新动态执行' in drawer_txt, repr(drawer_txt[-120:]))
     step('§E2#5 详情页背后的首页确实不含该卡片（详情走独立接口）',
          card_cnt2 == 0, 'card=%r' % card_cnt2)
+
+    # ---------- §E7 已归档标的的详情页：操作入口不得静默失效 ----------
+    # 归档在项目里的定义是**可见性开关**（与交易状态 status 正交），后端没有任何
+    # mutation 端点校验 archived_at；因此"已归档"不应变成"只读"，
+    # 更不该出现"按钮看着能点、点了毫无反应"的静默失效。
+    print('\n§E7 已归档标的的详情页 —— 操作入口仍可用（不静默失效）')
+    cases = [(1, '更新动态执行判断', '↗ 更新动态执行'),
+             (2, '录入交易流水', '⇄ 录入交易'),
+             (3, '更新研究结论', '⌁ 查看研究'),
+             (4, '更多操作', '··· 更多（对照组）')]
+    for nth, marker, label in cases:
+        mtxt = modal_text(drawer_action_batch(sid, nth))
+        step('§E7#%d 已归档标的：点「%s」弹出对应弹窗' % (nth, label),
+             marker in mtxt,
+             '未读到含「%s」的弹窗；读到=%r' % (marker, mtxt[:90]))
 
     # ---------- §E3 已归档标的的不可见性 ----------
     print('\n§E3 已归档标的对默认列表 / 标的库页彻底不可见')

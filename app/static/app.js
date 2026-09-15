@@ -86,7 +86,12 @@ const today = () => {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 };
-const findSec = id => S.secs.find(s => s.id === Number(id));
+// 归档是**可见性开关**（与交易状态 status 正交），不是只读开关 —— 后端没有任何
+// mutation 端点校验 archived_at。故查找必须同时覆盖活跃与已归档：否则从 #/s/{id}
+// （书签 / 浏览器后退 / 标的库的 A/H 关联链接）打开已归档标的时，详情抽屉上
+// 「更新动态执行 / 录入交易 / 查看研究 / ··· 更多」会全部**点了毫无反应**（静默失效）。
+const findSec = id => S.secs.find(s => s.id === Number(id))
+  || (S.archived || []).find(s => s.id === Number(id));
 const statusBadge = st => `<span class="badge ${STATUS_CLS[st] || 'b-pause'}">${esc(st)}</span>`;
 
 async function api(path, opt) {

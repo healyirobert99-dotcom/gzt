@@ -18,7 +18,8 @@ PRAGMA foreign_keys=ON；而 decision_ledger 是 append-only、必须保留"当�
       init_db 的幂等补列落地 —— 这是本改动最容易漏的地方（迁移会被整体跳过）
   §C  HTTP 层（真实 ThreadingHTTPServer）：?archived= 白名单、404/400、影响面接口
   §D  前端静态契约：× 在右上角、默认不可见、悬停显形、阻止冒泡、影响面弹窗、
-      键盘守卫（Enter 不得吞掉按钮点击）、**归档不得连带丢掉 A/H 关联**（§D#9）
+      键盘守卫（Enter 不得吞掉按钮点击）、**归档不得连带丢掉 A/H 关联**（§D#9）、
+      **归档是可见性开关而非只读**（§D#10：操作入口不得静默失效）
 
 本文件是功能测试，不写真实 data/workbench.db。
 """
@@ -730,6 +731,27 @@ def test_d_frontend_contract():
     step('§D#9e 标的库的 A/H 关联显示同样回退到已归档列表并标注',
          re.search(r'const o = inActive \|\| \(S\.archived \|\| \[\]\)\.find', js)
          is not None and '（已归档）' in js)
+
+    # D10 归档是**可见性开关**，不是只读开关
+    # 根因：findSec 只查 S.secs（活跃列表），而已归档标的的详情页从 #/s/{id} 仍能打开
+    #（书签 / 浏览器后退 / 标的库的 A/H 关联链接）→ 抽屉上「更新动态执行 / 录入交易 /
+    # 查看研究 / ··· 更多」4 个操作入口全部**点了毫无反应**（静默失效）。
+    # 后端没有任何 mutation 端点校验 archived_at，即后端本就允许编辑。
+    # 实测：修正前 §E7#1~#3 三条红、对照组 §E7#4（不走 findSec 的「更多操作」）绿。
+    m_find = re.search(r'const findSec = ([^;]+);', js, re.S)
+    find_body = m_find.group(1) if m_find else ''
+    step('§D#10 findSec 同时覆盖活跃与已归档列表（归档 = 可见性开关，非只读）',
+         'S.secs.find' in find_body and 'S.archived' in find_body,
+         'body=%r' % find_body[:120])
+    step('§D#10b findSec 优先活跃列表（同一 id 同时存在时以活跃为准）',
+         find_body.find('S.secs.find') < find_body.find('S.archived'),
+         'body=%r' % find_body[:120])
+    step('§D#10c 各操作入口统一走 findSec，无一处绕过它直接查活跃列表',
+         len(re.findall(r'const s = S\.secs\.find', js)) == 0
+         and js.count('const s = findSec(id); if (!s) return;') >= 7,
+         '直接查活跃列表=%d 处；走 findSec 的入口=%d 个'
+         % (len(re.findall(r'const s = S\.secs\.find', js)),
+            js.count('const s = findSec(id); if (!s) return;')))
 
 
 if __name__ == '__main__':
