@@ -130,3 +130,26 @@
 - **由脚本生成**，不手写：`.tmp_v108x/verify/make_desktop_launcher.py`（控制编码/行尾/无 BOM
   并回读校验）。验证：`e2e_desktop_launcher.py`（真实持久 PATH + cwd=桌面 + BROWSER 打桩，
   8 断言）、`neg_desktop_launcher.py`（守卫与提示 5 断言）。
+
+## ⑫ 写文件：别把长文本塞进 `python -c` 从 Bash 传
+
+2026-09-15 实测：用 `python -c "...open(...).write('''<很长的中文 Markdown>''')"` 追加日志，
+**Bash 会先把双引号串里的反引号当命令替换**——文本里出现的 `` `S.secs` ``、`` `archived_at` ``
+等被逐个执行、`$(` 更是直接语法错误，最终 Python 收到的是**被篡改过的源码**
+（报 `SyntaxError: unterminated triple-quoted string literal`），
+并在 stderr 里刷出一堆 `xxx: command not found` 的噪声。
+
+- 现象：命令 exit 0（因为最后一段 `wc` 成功），但**目标文件一个字节都没变**
+  —— 极易被误判成"写成功了"。**判定写入是否成功只看文件大小/SHA，不看 exit code。**
+- 对策：① 追加/修改 Markdown、代码，**一律用 Write/Edit 工具**；
+  ② 确需脚本写文件时，用 Write 落成 `.py` 再执行（同 heredoc 那条陷阱）；
+  ③ 文本里出现反引号 ` $ ( ) 本身就是信号：不要走 shell 引号。
+
+## ⑬ 验证脚本的读数必须来自"公共实现"
+
+同一天踩过两次：`get count` 的批次合并让 4 条断言假红、弹窗未关让点击落空，
+两次都先被误判成"功能坏了"。故**读数类 helper 统一放
+`.tmp_v108x/verify/browser_e2e_archive.py`**（`count_values` / `text_blocks` / `text_with`），
+三份浏览器脚本 import 复用，**禁止各自复制一份**（复制必然漂移）。
+另：新增断言的负向验证用"复制仓库 → 注入真实缺陷 → 要求目标标签 FAIL"，
+模板见 `neg_archive_import_contract.py`（4 注入 / 8 断言）。

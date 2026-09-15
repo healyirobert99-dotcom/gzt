@@ -19,7 +19,9 @@ PRAGMA foreign_keys=ON；而 decision_ledger 是 append-only、必须保留"当�
   §C  HTTP 层（真实 ThreadingHTTPServer）：?archived= 白名单、404/400、影响面接口
   §D  前端静态契约：× 在右上角、默认不可见、悬停显形、阻止冒泡、影响面弹窗、
       键盘守卫（Enter 不得吞掉按钮点击）、**归档不得连带丢掉 A/H 关联**（§D#9）、
-      **归档是可见性开关而非只读**（§D#10：操作入口不得静默失效）
+      **归档是可见性开关而非只读**（§D#10：操作入口不得静默失效）、
+      **归档 × 导入路径**（§D#11：匹配不按归档过滤，导入绝不复活归档/伪造归档事件）、
+      **归档标的的行情展示兜底**（§D#12：无行情不得渲染 undefined/NaN）
 
 本文件是功能测试，不写真实 data/workbench.db。
 """
@@ -752,6 +754,53 @@ def test_d_frontend_contract():
          '直接查活跃列表=%d 处；走 findSec 的入口=%d 个'
          % (len(re.findall(r'const s = S\.secs\.find', js)),
             js.count('const s = findSec(id); if (!s) return;')))
+
+    # D11 归档 × 导入路径（服务端同型面）
+    # 「被过滤集合」检查法的第三个面：导入流程按 exchange+code 匹配标的。
+    # 结论：匹配**不应**按归档过滤（身份只认 exchange+code），但导入也**绝不能**
+    # 复活归档、改写 archived_at 或伪造归档/恢复事件。动态证据见
+    # .tmp_v108x/verify/check_archive_import.py（39 断言，含真实仓库版 DB 快照）。
+    src = read_text('app/server.py')
+
+    def fbody(name):
+        for p in src.split('\ndef '):
+            if p.startswith(name + '('):
+                return p
+        return ''
+
+    m_ident = [s for s in re.findall(r"'([^']*FROM securities[^']*)'", src)
+               if 'exchange=? AND code=?' in s]
+    step('§D#11 标的匹配点均不按 archived_at 过滤（归档标的仍可被导入定位）',
+         len(m_ident) >= 4 and not any('archived_at' in s for s in m_ident),
+         '匹配点=%d 处；含归档过滤=%s'
+         % (len(m_ident), [s for s in m_ident if 'archived_at' in s]))
+    step('§D#11b _import_apply_one 用 row is None 判定新建 —— 归档标的走 UPDATE 路径，'
+         '不会被当成新标的重新 INSERT',
+         'is_new = row is None' in fbody('_import_apply_one'))
+    step('§D#11c archived_at 全项目只有 1 个写入口（_set_archived_at）',
+         src.count('UPDATE securities SET archived_at=') == 1)
+    import_funcs = ('preview_import_full', 'commit_import_full', '_import_apply_one',
+                    '_import_full_diff', '_import_snapshot_for',
+                    'preview_import_execution', 'commit_import_execution')
+    dirty = [n for n in import_funcs if 'archived_at' in fbody(n)]
+    step('§D#11d 导入路径 7 个函数体内完全不出现 archived_at（既不读也不写）',
+         len(dirty) == 0, '越界函数=%s' % dirty)
+    step('§D#11e create_security_tx 的 INSERT 列清单不含 archived_at（新标的恒为 NULL）',
+         'INSERT INTO securities (code, exchange, name, currency, market, sector, notes, '
+         'status, created_at, updated_at)' in fbody('create_security_tx'))
+    step('§D#11f 前端只用 active + only 两个集合，从不请求 archived=all（诊断档）',
+         "api('/api/securities')" in js and "api('/api/securities/archived')" in js
+         and 'archived=all' not in js)
+
+    # D12 归档标的的行情展示：无行情时必须走兜底，不得渲染出 undefined/NaN
+    step('§D#12 uiMiniChart 对空行情有兜底（!q || q.current == null → 占位符）',
+         re.search(r'function uiMiniChart\(q, cls\) \{\s*\n\s*if \(!q \|\| q\.current == null\) return',
+                   js) is not None)
+    step('§D#12b 全部行情渲染点都有「暂无行情」兜底（≥4 处）',
+         js.count('暂无行情') >= 4, '兜底点=%d 处' % js.count('暂无行情'))
+    step('§D#12c 详情抽屉价格行同样三目兜底（q ? … : 暂无行情）',
+         "uiDrawerDetail" in js and "? curSym(s.currency) + ' ' + num(q.current, dec) : '暂无行情'"
+         in js)
 
 
 if __name__ == '__main__':
