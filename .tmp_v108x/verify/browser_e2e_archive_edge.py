@@ -28,9 +28,13 @@ sys.path.insert(0, HERE)
 
 from browser_e2e_archive import (  # noqa: E402
     BASE, URL, REAL_DB, REAL_PREFIX, SANDBOX_DB,
-    _bl, batch, close_all, req, sha, archived_rows, sec_row, ledger_total,
-    last_text, count_values,
+    batch, close_all, req, sha, archived_rows, sec_row, ledger_total,
+    last_text, count_values, text_blocks, text_with,
 )
+
+# 读数一律用公共实现（都在 browser_e2e_archive 里，三份脚本共用一份，避免漂移）：
+#   count_values(out)     —— 按行取纯整数行；get count 命令须**独占批次**
+#   text_with(out, *keys) —— 按关键词取文本块，不依赖块序号
 
 PASS = FAIL = 0
 
@@ -43,22 +47,6 @@ def step(name, ok, detail=''):
     else:
         FAIL += 1
         print('  FAIL  %s   %s' % (name, detail))
-
-
-def text_blocks(out):
-    """所有非纯数字的读数块（按出现顺序）。"""
-    return [b.strip() for b in _bl(out) if b.strip() and not b.strip().isdigit()]
-
-
-def text_with(out, *needles):
-    """取第一个同时含全部关键词的文本块（避免依赖块序号）。"""
-    for b in text_blocks(out):
-        if all(n in b for n in needles):
-            return b
-    return ''
-
-
-# count_values 已由 browser_e2e_archive 提供（按行提取纯整数行；count 命令须独占批次）。
 
 
 def archive_all(ids):

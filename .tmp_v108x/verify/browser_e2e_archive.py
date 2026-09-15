@@ -175,6 +175,23 @@ def count_values(out):
     return [int(s) for s in (l.strip() for l in out.splitlines()) if s.isdigit()]
 
 
+def text_blocks(out):
+    """所有**非纯数字**的读数块（按出现顺序）。
+
+    注意：块划分本身不可靠（见文件头陷阱 7），所以取文本只应「按内容特征」
+    从块里挑（`text_with`），不要按序号取。
+    """
+    return [b.strip() for b in _bl(out) if b.strip() and not b.strip().isdigit()]
+
+
+def text_with(out, *needles):
+    """取第一个**同时含全部关键词**的文本块（避免依赖块序号）。未命中返回 ''。"""
+    for b in text_blocks(out):
+        if all(n in b for n in needles):
+            return b
+    return ''
+
+
 def last_style(out):
     sb = style_blocks(out)
     return sb[-1] if sb else {}
