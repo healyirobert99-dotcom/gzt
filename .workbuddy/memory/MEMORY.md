@@ -100,8 +100,13 @@
    `kill_port.py 8805` 按端口杀进程树。**先读 `ENV-TRAPS.md` ⑪⑩⑦⑤④，别先怀疑产品。**
 4. **进程内探针**（不起服务）：monkeypatch `server.DB_PATH` 到真实库副本，**真实库 SHA-256
    前后必须一致**（当前 `4f4832aa51d00b51…`）。
+5. **并发探针**（append-only / token 类改动必跑）：线程池 + `Barrier` 同时打同一条路径，
+   断言写成**与调度无关的不变式**（每轮 changed=True 严格 == 1 / 台账增量 == changed 数 /
+   终态 ⟺ 成功次数奇偶），而不是"某次观测到的数字"。
 
 - 凡「一次性凭据 / token / append-only 写入」改动**必须跑并发探针**；顺序路径全绿不能证明无缺陷。
+  **归档 / 恢复算 append-only 写入**（每次追加 1 条 `decision_ledger`）→ 已有常备探针
+  `concurrency_archive_probe.py`（12 断言）+ 离线契约 `§C#15~#15d`（真实 HTTP 并发）。
   并发数字要可复现：恒定写「严格 = 1」，波动写区间 + 不变式，**禁止写死某次观测值**。
 - 交付包自洽一条命令：`scripts/verify_pack.py <zip> --workspace . --rerun [--port-probe]`。
 - **「被过滤集合」三问检查法**（09-15 立，已揪出 2 个真缺陷）：凡有一个被过滤过的集合（`S.secs`），

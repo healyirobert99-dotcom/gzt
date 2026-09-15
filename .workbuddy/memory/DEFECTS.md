@@ -8,10 +8,11 @@
 
 - 2026-09-14 顶栏「数据更新」按钮：`tests/test_data_update_btn.py`（42）+ 负向
   `neg_data_update_btn.py` + 端到端 `e2e_data_update_btn.py`。
-- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（124）+
+- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（128）+
   浏览器 `browser_e2e_archive.py`（38）/ `browser_e2e_archive_edge.py`（37）/
   `check_ah_link_archive.py`（11）+ 进程内 `check_archive_import.py`（38）+
-  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`（12，6 次注入）/
+  并发 `concurrency_archive_probe.py`（12）+ 负向 `neg_security_archive.py` /
+  `neg_archive_import_contract.py`（16，8 次注入）/
   `neg_findsec_browser.py`（6，浏览器层回退 findSec → §E7#1~3 + §E8#1~4 共 7 条翻红）。
 
 ## v1.0.9（封板，R-027 / R-028）
@@ -71,3 +72,17 @@
 - **归档标的的行情必须走兜底**：行情只对 `S.secs` 拉取 → 已归档标的 `quoteOf()` 返回 null，
   全部渲染点（含详情抽屉）须有「暂无行情」兜底，`uiMiniChart` 须判空（否则整抽屉渲染崩）。
   锁 `§D#12`（3 条）。
+
+## 已**验证为安全**、并锁成不变式（不是缺陷，但回退就会翻红）
+
+- **归档 / 恢复在并发下不污染 append-only 台账**（2026-09-15）：`_set_archived_at` 是
+  「读校验 → 写状态 → 追加台账」三段式，天然有 TOCTOU 嫌疑，故按铁律跑了并发探针
+  （`concurrency_archive_probe.py`，12 断言：12 轮×8 线程纯归档 + 12 轮×8 线程混合）。
+  实测 192 次调用：**每轮 changed=True 严格 == 1**、台账增量 == changed=True 数、
+  无幽灵行、无其它异常、终态与成功次数奇偶守恒。锁 `§C#15~#15d`（4 条，真实
+  ThreadingHTTPServer + 真 HTTP 并发）。
+  - **并发冲突必须走 409 而不是 500**：192 次里真的撞上 SQLITE_BUSY 32 次（~17%）。
+    归档路由走统一的 `_mut`，`_is_db_busy_error` 用 `code & 0xFF` 取主码，
+    故 `SQLITE_BUSY_SNAPSHOT`(517) 也被正确归入 409 族 —— **不得退回"只比对 5/6"**。
+  - 负向证据：去掉幂等守卫（M7）→ 单轮 6 个 changed=True、并出现 409；写了台账却报
+    `changed=False`（M8）→ 台账增量与 changed 数不一致。两次都按预期翻红。

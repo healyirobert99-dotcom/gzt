@@ -16,6 +16,10 @@
 另两个注入（对应 §D#10d / §D#10e，「··· 更多」转发器）：
   M5  openMoreActions 里先查一次活跃列表再 return → 已归档标的 4 项一并静默失效
   M6  某一项把 ${id} 换成 ${s.id} → 不再是"纯 id 透传"，4 项不再一致
+
+再两个注入（对应 §C#15 / §C#15b，并发 append-only 台账）：
+  M7  去掉 _set_archived_at 的幂等守卫 → 并发下重复追加「标的归档」
+  M8  写了台账却返回 changed=False → 幽灵行（写了却不报告）
 """
 import os
 import re
@@ -114,6 +118,28 @@ def _impact_after(sid):""",
         old='onclick="closeModal();openStatusModal(${id})">变更状态',
         new='onclick="closeModal();openStatusModal(${s.id})">变更状态',
     ),
+    dict(
+        key='M7',
+        expect='§C#15 并发归档：每轮 changed=True 恰好 1 个',
+        desc='去掉 _set_archived_at 的幂等守卫（并发下必然重复追加台账）',
+        target='app/server.py',
+        old="""    if bool(sec.get('archived_at')) == bool(value):
+        return {'changed': False, 'security_id': sid,
+                'archived_at': sec.get('archived_at'), 'name': sec['name']}""",
+        new="""    if False:   # 注入：去掉幂等守卫
+        return {'changed': False, 'security_id': sid,
+                'archived_at': sec.get('archived_at'), 'name': sec['name']}""",
+    ),
+    dict(
+        key='M8',
+        expect='§C#15b 并发归档：台账增量恰等于 changed=True 数',
+        desc='写了台账却报告 changed=False（幽灵行：写了却没报告）',
+        target='app/server.py',
+        old="""    return {'changed': True, 'security_id': sid, 'archived_at': value,
+            'name': sec['name'], 'code': sec['code'], 'exchange': sec['exchange']}""",
+        new="""    return {'changed': False, 'security_id': sid, 'archived_at': value,
+            'name': sec['name'], 'code': sec['code'], 'exchange': sec['exchange']}""",
+    ),
 ]
 
 
@@ -149,7 +175,7 @@ def run_case(mut):
 
 def main():
     print('=' * 78)
-    print('负向验证：§D#10d/#10e + §D#11 / §D#12 新断言是否真的会翻红')
+    print('负向验证：§C#15 + §D#10d/#10e + §D#11 / §D#12 新断言是否真的会翻红')
     print('=' * 78)
     for mut in MUTATIONS:
         res, err = run_case(mut)

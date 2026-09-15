@@ -612,6 +612,62 @@ def test_c_http():
         step('§C#14 影响面接口是只读的（连查两次不改变状态）',
              st == 200 and any(s['id'] == target for s in
                                req('GET', '/api/securities')[1]))
+
+        # §C#15 并发归档 —— append-only 台账 × 409 映射的**联合契约**。
+        # 项目铁律：凡 append-only 写入必须跑并发探针（v1.0.9 的 R-027 就是这样漏出的）。
+        # 归档/恢复每次都追加一条 decision_ledger，而 _set_archived_at 是
+        # 「读校验 → 写状态 → 追加台账」三段式，天然有 TOCTOU 嫌疑。
+        # 三点必须**同时**成立：
+        #   ① 同一标的同方向并发，台账增量 == 该轮 changed=True 数（无幽灵行/无漏报）；
+        #   ② changed=True 每轮恰好 1 个（幂等：重复点击不得追加第二次事件）；
+        #   ③ 其它响应只能是 409（受控冲突），**绝不出现 500**。
+        conc = make_security('600004', 'HTTP 并发标的')
+        CN, CR = 8, 3
+        conc_bad, conc_codes = [], set()
+        conc_true = conc_ledger = conc_409 = 0
+        for _r in range(CR):
+            req('POST', '/api/securities/%d/unarchive' % conc, {})   # 复位到未归档
+            base_l = count_of('decision_ledger', conc)
+            barrier = threading.Barrier(CN)
+            out = [None] * CN
+
+            def hit(i):
+                barrier.wait()
+                try:
+                    s, b = req('POST', '/api/securities/%d/archive' % conc,
+                               {'reason': '并发探针'})
+                    out[i] = (s, bool(b.get('changed')) if isinstance(b, dict) else False)
+                except Exception as e:                            # noqa: BLE001
+                    out[i] = ('EXC', type(e).__name__)
+
+            ts = [threading.Thread(target=hit, args=(i,)) for i in range(CN)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+
+            codes = [o[0] for o in out]
+            conc_codes |= set(codes)
+            n_true = sum(1 for o in out if o[0] == 200 and o[1])
+            d_led = count_of('decision_ledger', conc) - base_l
+            conc_true += n_true
+            conc_ledger += d_led
+            conc_409 += sum(1 for c in codes if c == 409)
+            if d_led != n_true or n_true != 1:
+                conc_bad.append((n_true, d_led, sorted(set(codes))))
+
+        step('§C#15 并发归档：每轮 changed=True 恰好 1 个（幂等，不重复追加台账事件）',
+             not conc_bad and conc_true == CR,
+             'changed=True 合计=%d（期望 %d 轮各 1）；异常轮=%s' % (conc_true, CR, conc_bad[:2]))
+        step('§C#15b 并发归档：台账增量恰等于 changed=True 数（append-only 不被污染）',
+             conc_ledger == conc_true, '台账增量合计=%d' % conc_ledger)
+        step('§C#15c 并发冲突一律 409，绝不出现 500（受控冲突 ≠ 服务器故障）',
+             conc_codes and conc_codes <= {200, 409},
+             '出现过的状态码=%s（其中 409 共 %d 次；本断言是"绝不出现 500"的守卫，'
+             '不因未撞上 busy 而失效）' % (sorted(conc_codes), conc_409))
+        step('§C#15d 并发归档后终态为已归档（状态与台账一致）',
+             sec_row(conc)['archived_at'] is not None)
+        req('POST', '/api/securities/%d/unarchive' % conc, {})
     finally:
         srv.shutdown()
         srv.server_close()
