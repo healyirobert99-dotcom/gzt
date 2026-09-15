@@ -22,6 +22,13 @@
    （这也正是真实用户路径：悬停才显形，显形才能点）。
 6. 读数块不能用「第 N 个 ✓ Done」定位（`mouse move` / `wait` 不一定输出 ✓ Done）。
    改为按内容特征取：整数块 / 最后一个样式块 / 最后一个文本块。
+7. **一次 batch 里多条命令的输出会被合并进同一个块**（探针 probe_count.py 实测输出
+   `'\n\n17\n\n0\n\n06:10\n\n17\n'` —— 3 个 `get count` + 1 个 `get text` 全挤在一块里），
+   `✓ Done` 并非每命令一枚。故本文件的 `ints()` / `last_int()` 只在
+   「count 恰好在批次**末尾**、且该批次内没有 `get text`」时才侥幸可靠。
+   写新读数请用 `count_values()` 并让 **count 命令独占批次** ——
+   count 与 `get text` 混在同一批次时，文本里的纯数字行会污染读数。
+   （本轮边界检查正是踩此坑：4 条断言假红，而文本证据全 PASS。）
 """
 import hashlib
 import json
@@ -151,6 +158,21 @@ def last_text(out):
         if s and not s.isdigit():
             return s
     return ''
+
+
+def count_values(out):
+    """`get count` 读数的**唯一可靠**取法：按行提取纯整数行。
+
+    使用前提（违反即污染读数）：
+      * `get count` 命令**独占一个 batch** —— 不要与 `get text` 混批次，
+        否则文本里的纯数字行会被一并收进来；
+      * 不需要依赖 `✓ Done` 的块划分（实测块划分不可靠，见文件头陷阱 7）。
+
+    `open` 的横幅（`http://127.0.0.1:8805/#/home`）、`get text` 里的时刻
+    （`06:10`）之类含分隔符的读数都不是「纯整数行」，天然被 isdigit() 排除。
+    **0 会照常输出**（已实测），故本函数能如实区分「一个都没有」与「读数失败」。
+    """
+    return [int(s) for s in (l.strip() for l in out.splitlines()) if s.isdigit()]
 
 
 def last_style(out):

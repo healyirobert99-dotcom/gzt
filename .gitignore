@@ -29,6 +29,11 @@ env/
 *.db-wal
 *.db-journal
 
+# ---- 验证脚本的原始输出 ----
+# agent-browser 每次运行会把逐条命令的原始输出落成 ab_NNN.txt（数量多、信息重复）；
+# 整理后的结论保存在同目录的 *_out.txt 里，故原始文件不入库。
+.tmp_v108x/verify/ab_out/
+
 # ---- 操作系统垃圾 ----
 .DS_Store
 .DS_Store?
