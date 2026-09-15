@@ -18,6 +18,12 @@
   `python -c "import subprocess; subprocess.run(['taskkill','/F','/PID',pid])"`。
 - `os.remove()` 可能被环境拦截为"回收站"操作且失败；**覆盖文件请先生成到临时名再 `mv -f`**。
 - 生成中文文件名 ZIP 用 `zipfile.ZipInfo` + `create_system=0`，可规避中文乱码。
+- **11 个离线套件的汇总格式互不统一**（2026-09-15 实测）：`test_security_archive.py` 打
+  `TOTAL=/PASS=/FAIL=/SKIP=`；`test_v102/v105/v109/v110/integration_quote` 打 `PASS n / FAIL n`；
+  `test_data_update_btn.py` 多一段 `/SKIP n/`；**`test_v103.py` 只打「全部通过」且断言用
+  `[✅]` 标记、不给任何计数**；`test_v106/107/108` 只打 `FAIL_COUNT = 0`。
+  汇总全部套件请用 `.tmp_v108x/verify/run_all_tests.py`（优先取汇总行，取不到就数断言行，
+  并与**已知基线**交叉核对 —— 本项目的铁律是"改动前后断言数必须对得上、净变化要有来源"）。
 - Python 读 CRLF 文本不加 `newline=''`，universal newlines 会折掉 `\r`。
 - **连续多次 Edit 同一文件时，部分编辑可能被环境静默回滚**（工具返回成功但内容未落盘，
   2026-09-11 对 MEMORY.md 就发生过，直到 09-14 才发现）。
