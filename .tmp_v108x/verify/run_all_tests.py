@@ -37,7 +37,7 @@ BASELINE = {
     'tests/test_v109.py': 83, 'tests/test_v110.py': 14,
     'tests/test_data_update_btn.py': 42,
     'tests/test_integration_quote.py': 14,
-    'tests/test_security_archive.py': 110,      # 105 + 本轮新增 §D#9 共 5 条
+    'tests/test_security_archive.py': 113,      # 105 + §D#9 共 5 条 + §D#10 共 3 条
 }
 
 RE_SUM = re.compile(r'PASS[ =:]+(\d+).*?FAIL[ =:]+(\d+)')
