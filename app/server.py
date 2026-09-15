@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS securities (
   current_price_updated_at TEXT,
   created_at TEXT,
   updated_at TEXT,
+  archived_at TEXT,
   UNIQUE(exchange, code)
 );
 CREATE TABLE IF NOT EXISTS research (
@@ -366,8 +367,46 @@ class MigrationError(RuntimeError):
 
 
 def _column_exists(conn, table, column):
-    return any(r['name'] == column
-               for r in conn.execute(f'PRAGMA table_info({table})').fetchall())
+    """table 上是否存在 column。
+
+    调用方的连接应已设 `row_factory = sqlite3.Row`（get_db / init_db 都设了）。
+    此处对没设 row_factory 的连接也做了兼容 —— PRAGMA table_info 的返回行若被当
+    tuple 处理，`r['name']` 会抛 `TypeError: tuple indices must be integers`，
+    而补列路径（_ensure_security_columns）正是靠这个函数判定"要不要 ALTER"，
+    一旦抛错就等于"启动即失败"，代价太大，不值得省这两行。
+    """
+    for r in conn.execute(f'PRAGMA table_info({table})').fetchall():
+        name = r['name'] if hasattr(r, 'keys') else r[1]
+        if name == column:
+            return True
+    return False
+
+
+# v1.0.10-archived（不升版本号）：securities 的幂等补列。
+#
+# 为什么不能走 do_migration：
+#   1) 用户的库 settings.schema_version 已经是 TARGET_SCHEMA_VERSION，
+#      init_db 会**整体跳过** do_migration；
+#   2) 而 init_db 里的 conn.executescript(SCHEMA) 用的是 CREATE TABLE IF NOT EXISTS，
+#      对**已存在**的表不会补列。
+# 所以新增列必须在 init_db 里独立、无条件、幂等地检查一次（ALTER TABLE ... ADD COLUMN
+# 在列已存在时会报 duplicate column name，故必须先判存在）。
+#
+# 覆盖三类库：① 全新空库（executescript 已建好，此处 no-op）
+#             ② 老库（此处补列） ③ 被迁移重建过的库（重建列表已含该列，此处 no-op）
+EXPECTED_SECURITY_COLUMNS = (
+    ('archived_at', 'TEXT'),
+)
+
+
+def _ensure_security_columns(conn):
+    added = []
+    for col, decl in EXPECTED_SECURITY_COLUMNS:
+        if not _column_exists(conn, 'securities', col):
+            conn.execute(f'ALTER TABLE securities ADD COLUMN {col} {decl}')
+            added.append(col)
+    return added
+
 
 
 def _has_unique_index_on(conn, table, cols):
@@ -425,6 +464,7 @@ def _create_securities_uniqueness_if_missing(conn):
         ('current_price_updated_at', 'TEXT'),
         ('created_at', 'TEXT'),
         ('updated_at', 'TEXT'),
+        ('archived_at', 'TEXT'),
     ]
     for col, decl in _expected_securities_cols:
         if not _column_exists(conn, 'securities', col):
@@ -457,10 +497,12 @@ def _create_securities_uniqueness_if_missing(conn):
       current_price_updated_at TEXT,
       created_at TEXT,
       updated_at TEXT,
+      archived_at TEXT,
       UNIQUE(exchange, code)
     )''')
     cols = ('id','code','exchange','name','currency','market','sector','ah_link_id','notes',
-            'status','research_pool','current_price','current_price_updated_at','created_at','updated_at')
+            'status','research_pool','current_price','current_price_updated_at','created_at','updated_at',
+            'archived_at')
     src_cols = ','.join(cols)
     conn.execute(
         f'INSERT INTO securities__new ({src_cols}) SELECT {src_cols} FROM securities'
@@ -842,6 +884,9 @@ def init_db(seed=False, db_path=None):
     try:
         conn.executescript(SCHEMA)
 
+        # 幂等补列（不依赖 schema_version 迁移，见 _ensure_security_columns 注释）
+        _ensure_security_columns(conn)
+
         if not is_new:
             # 读 schema_version（已是目标则完全跳过迁移）
             cur = conn.execute("SELECT value FROM settings WHERE key='schema_version'").fetchone()
@@ -1150,10 +1195,24 @@ def get_settings_cached(conn):
 
 # ================ 查询接口 ================
 
-def list_securities():
+def list_securities(mode='active'):
+    """列出标的。
+
+    mode='active'（默认）：未归档 —— 归档的标的不出现在工作台任何统计/渲染里。
+    mode='only'          ：仅已归档，供「已归档」区展示与恢复。
+    mode='all'           ：全部（含已归档），仅供测试与诊断。
+
+    归档不是第六种 status，而是独立的可见性开关；默认过滤是"归档即从工作台消失"
+    这条语义的唯一实现点。
+    """
+    where = {'active': ' WHERE archived_at IS NULL',
+             'only': ' WHERE archived_at IS NOT NULL',
+             'all': ''}.get(mode)
+    if where is None:
+        raise ApiError('archived 参数不合法（应为 only / all）')
     conn = get_db()
     try:
-        rows = conn.execute('SELECT * FROM securities ORDER BY id').fetchall()
+        rows = conn.execute('SELECT * FROM securities' + where + ' ORDER BY id').fetchall()
         s = get_settings_cached(conn)
         a = s.get('account_size_cny') or None
         h = s.get('hkd_cny_rate') or None
@@ -1887,6 +1946,132 @@ def add_note_tx(conn, sid, body):
 def add_note(sid, body):
     add_note_tx(sid, body)
     return get_detail(sid)
+
+
+# ================ 标的归档 / 恢复（软删除，不升版本号） ================
+#
+# 为什么是归档而不是 DELETE：
+#   research / trade_plans / execution_reviews / decision_ledger / trades 五张子表
+#   全部以 `ON DELETE RESTRICT` 引用 securities(id)，且应用开着 PRAGMA foreign_keys=ON；
+#   而决策台账是 append-only、必须保留"当时的判断"。任何 DELETE 都会永久抹掉历史。
+#   归档 = 只把 securities.archived_at 打上时间戳，标从工作台消失但历史完整、可恢复。
+#
+# 硬不变式（tests/test_security_archive.py 逐条锁定）：
+#   A1. 归档/恢复**不删除任何行、不修改任何既有行**。"只改 securities 的
+#       archived_at / updated_at 两列" —— 其余 securities 字段、五张子表全部原样。
+#   A2. 归档与恢复各**追加 1 条** decision_ledger（event_type='标的归档' / '标的恢复'），
+#       与"状态变更 / 研究更新 / 备注"的既有约定一致：每个状态变化都在台账留痕。
+#       ledger 只增不改不删。
+#   A3. research / trade_plans / execution_reviews / trades 四表行数**逐表不变**。
+#   A4. 幂等：对已归档的标的重放归档 → 不报错、**不重复写台账**（changed=False）。
+#   A5. 恢复是归档的严格逆操作：archived_at 归 NULL，其余不变。
+#   A6. 标的不存在 → NotFoundError(404)；id 非数字 → 由路由层挡掉。
+#   A7. 归档不改变 status —— "归档"是可见性，不是第六种交易状态，不得混入
+#       STATUSES 白名单（否则会污染"状态变更"的语义与台账）。
+
+ARCHIVE_EVENT = '标的归档'
+UNARCHIVE_EVENT = '标的恢复'
+
+# GET /api/securities?archived=... 的白名单（未列出的取值一律 400，不静默兜底）
+_ARCHIVED_MODES = {
+    '': 'active', '0': 'active', 'false': 'active', 'no': 'active', 'active': 'active',
+    '1': 'only', 'only': 'only', 'true': 'only', 'yes': 'only',
+    'all': 'all',
+}
+
+
+_ARCHIVE_IMPACT_TABLES = (
+    ('research', 'research'),
+    ('trade_plans', 'plans'),
+    ('execution_reviews', 'executions'),
+    ('decision_ledger', 'ledger'),
+    ('trades', 'trades'),
+)
+
+
+def archive_impact(conn, sid):
+    """归档影响面：该标的在各子表上的行数。
+
+    纯只读，供前端确认弹窗展示"将保留的历史有多少"。**不删除任何行** ——
+    这里返回的每个数字，归档后都必须原样存在。
+    """
+    sec = get_security_or_404(conn, sid)
+    out = {
+        'security_id': sec['id'],
+        'name': sec['name'],
+        'code': sec['code'],
+        'exchange': sec['exchange'],
+        'status': sec['status'],
+        'currency': sec['currency'],
+        'archived_at': sec.get('archived_at'),
+        'is_archived': bool(sec.get('archived_at')),
+    }
+    for table, key in _ARCHIVE_IMPACT_TABLES:
+        out[key] = conn.execute(
+            'SELECT COUNT(*) c FROM %s WHERE security_id=?' % table, (sid,)).fetchone()['c']
+    out['total'] = sum(out[k] for _, k in _ARCHIVE_IMPACT_TABLES)
+    return out
+
+
+def _set_archived_at(conn, sid, value, event_type, summary, reason=''):
+    """唯一的 archived_at 写入口。归档与恢复都必须经过它，避免两条路径漂移。"""
+    sec = get_security_or_404(conn, sid)
+    if bool(sec.get('archived_at')) == bool(value):
+        return {'changed': False, 'security_id': sid,
+                'archived_at': sec.get('archived_at'), 'name': sec['name']}
+    conn.execute('UPDATE securities SET archived_at=?, updated_at=? WHERE id=?',
+                 (value, now_str(), sid))
+    ledger_add(conn, sid, today_str(), event_type, summary, reason)
+    return {'changed': True, 'security_id': sid, 'archived_at': value,
+            'name': sec['name'], 'code': sec['code'], 'exchange': sec['exchange']}
+
+
+@_run_in_transaction
+def archive_security_tx(conn, sid, body):
+    sec = get_security_or_404(conn, sid)
+    reason = str((body or {}).get('reason') or '').strip()
+    return _set_archived_at(
+        conn, sid, now_str(), ARCHIVE_EVENT,
+        '标的归档（从工作台隐藏，研究/计划/执行/台账全部保留）：%s（%s.%s）'
+        % (sec['name'], sec['code'], sec['exchange']),
+        reason)
+
+
+def archive_security(sid, body=None):
+    """归档。返回操作结果 + 归档后的影响面（子表行数应逐表不变）。"""
+    res = archive_security_tx(sid, body or {})
+    res['impact'] = _impact_after(sid)
+    return res
+
+
+def _impact_after(sid):
+    conn = get_db()
+    try:
+        return archive_impact(conn, sid)
+    finally:
+        conn.close()
+
+
+@_run_in_transaction
+def unarchive_security_tx(conn, sid, body):
+    sec = get_security_or_404(conn, sid)
+    reason = str((body or {}).get('reason') or '').strip()
+    return _set_archived_at(
+        conn, sid, None, UNARCHIVE_EVENT,
+        '标的恢复（重新回到工作台）：%s（%s.%s）'
+        % (sec['name'], sec['code'], sec['exchange']),
+        reason)
+
+
+def unarchive_security(sid, body=None):
+    res = unarchive_security_tx(sid, body or {})
+    res['impact'] = _impact_after(sid)
+    return res
+
+
+def list_archived_securities():
+    """已归档标的（enrich 后的完整形态），供前端「已归档」区展示与恢复。"""
+    return list_securities(mode='only')
 
 
 # ================ v1.0.7 导入与更新 / v1.0.8 导入完整性封板 ================
@@ -3247,7 +3432,20 @@ class Handler(BaseHTTPRequestHandler):
         # ---- GET
         if method is None:
             if seg == ['api', 'securities']:
-                return self._json(list_securities())
+                raw = (qs.get('archived', [''])[0] or '').strip().lower()
+                mode = _ARCHIVED_MODES.get(raw)
+                if mode is None:
+                    return self._err('archived 参数不合法（应为 only / all）', 400)
+                return self._json(list_securities(mode=mode))
+            if len(seg) == 3 and seg[1] == 'securities' and seg[2] == 'archived':
+                return self._json(list_archived_securities())
+            if (len(seg) == 4 and seg[1] == 'securities' and seg[2].isdigit()
+                    and seg[3] == 'archive-impact'):
+                conn = get_db()
+                try:
+                    return self._json(archive_impact(conn, int(seg[2])))
+                finally:
+                    conn.close()
             if len(seg) == 3 and seg[1] == 'securities' and seg[2].isdigit():
                 return self._json(get_detail(int(seg[2])))
             if len(seg) == 4 and seg[1] == 'securities' and seg[2].isdigit() and seg[3] == 'execution':
@@ -3286,6 +3484,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(update_security(sid, body))
             if len(seg) == 4:
                 sub = seg[3]
+                if method == 'POST' and sub == 'archive':
+                    return self._json(archive_security(sid, body))
+                if method == 'POST' and sub == 'unarchive':
+                    return self._json(unarchive_security(sid, body))
                 if method == 'POST' and sub == 'status':
                     return self._json(change_status(sid, body))
                 if method == 'POST' and sub == 'trades':

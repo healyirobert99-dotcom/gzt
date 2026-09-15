@@ -676,3 +676,51 @@ body::before { display: none; }
 @media (max-width: 760px) {
   .risk-badge { margin-top: 0; }
 }
+
+/* ===== 标的归档 / 恢复（卡片右上角 ×，软删除，不升版本号） =====
+   设计要点：卡片 head 永久预留 24px 槽位，× 始终占据右上角，
+   仅把 opacity 从 0 提到 1 —— 若改成 hover 时才让徽章让位，会造成悬停抖动。
+   × 的红色取自 --up + --red-dim，只表达"破坏性操作"，与行情涨跌语义无关。 */
+.terminal-card-head { padding-right: 24px; }
+.card-archive {
+  position: absolute; top: 9px; right: 9px; z-index: 3;
+  display: grid; place-items: center;
+  width: 20px; height: 20px; padding: 0;
+  border: 1px solid var(--border); border-radius: 5px;
+  color: var(--muted); background: rgba(14, 17, 22, .72);
+  font: 600 13px/1 inherit; cursor: pointer;
+  opacity: 0; pointer-events: none;
+  transition: opacity .16s ease, color .16s ease, border-color .16s ease, background .16s ease;
+}
+.terminal-card:hover .card-archive,
+.terminal-card.keyboard-focus .card-archive,
+.terminal-card.selected-card .card-archive { opacity: 1; pointer-events: auto; }
+.card-archive:focus-visible { opacity: 1; pointer-events: auto; outline: none; border-color: var(--accent); }
+.card-archive:hover { color: var(--up); border-color: var(--up); background: var(--red-dim); }
+
+/* 归档 / 恢复确认弹窗 */
+.archive-target { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel2); }
+.archive-target b { font-size: 15px; }
+.archive-target > span { color: var(--muted); font-size: 12px; }
+.archive-lead { margin: 14px 0 8px; color: var(--text); font-size: 13px; }
+.archive-note { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+.archive-warn { margin: 10px 0 0; padding: 7px 10px; border-radius: 5px; color: var(--warn); background: var(--warn-dim); font-size: 12px; }
+.archive-impact { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 7px; }
+.archive-impact > div { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: rgba(255, 255, 255, .02); }
+.archive-impact span { display: block; color: var(--muted); font-size: 11px; }
+.archive-impact b { display: block; margin-top: 2px; font: 600 17px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.archive-reason { display: block; margin-top: 14px; }
+.archive-reason > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
+.archive-reason input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: rgba(255, 255, 255, .02); font: 13px inherit; }
+.archive-reason input:focus { border-color: var(--accent); outline: none; }
+
+/* 首页「已归档」区 */
+.archive-section { margin-top: 28px; }
+.archive-list { display: grid; gap: 6px; margin-top: 10px; }
+.archive-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) auto; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; background: rgba(16, 23, 33, .72); }
+.archive-row-main { display: grid; min-width: 0; }
+.archive-row-main b { font-size: 13px; }
+.archive-row-main span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.archive-row-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.archive-row-meta > span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+

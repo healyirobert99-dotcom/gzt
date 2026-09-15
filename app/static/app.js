@@ -62,7 +62,7 @@ function sanitizeUrl(url) {
 }
 
 /* ===== 全局状态 ===== */
-const S = { secs: [], settings: {}, quotes: {}, quoteTime: '', quoteError: '',
+const S = { secs: [], archived: [], settings: {}, quotes: {}, quoteTime: '', quoteError: '',
             lastSuccessAt: '', lastError: '', lastErrorAt: '' };
 const STATUSES = ['可交易', '等价格', '等证据', '持仓中', '暂不参与'];
 const STATUS_CLS = { '可交易': 'b-ready', '等价格': 'b-wait', '等证据': 'b-proof', '持仓中': 'b-hold', '暂不参与': 'b-pause' };
@@ -266,8 +266,10 @@ function realPosPct(sec, position) {
 
 /* ===== 数据加载 ===== */
 async function loadAll() {
-  const [secs, st] = await Promise.all([api('/api/securities'), api('/api/settings')]);
+  const [secs, archived, st] = await Promise.all([
+    api('/api/securities'), api('/api/securities/archived'), api('/api/settings')]);
   S.secs = secs;
+  S.archived = archived;
   S.settings = st;
 }
 async function afterMutation() {
@@ -1552,6 +1554,99 @@ function openMoreActions(id) {
   </div>`, null, '关闭');
 }
 
+/* ===== 标的归档 / 恢复（软删除，不升版本号） =====
+   卡片右上角的「×」触发归档。归档不是删除：后端只给 securities.archived_at 打时间戳，
+   research / trade_plans / execution_reviews / decision_ledger / trades 一行都不动。
+   故确认弹窗必须先把「保留多少历史」摆给用户看，再让用户确认。
+   —— 前端不做二次判断：is_archived 以后端 /archive-impact 的返回为准。 */
+
+const ARCHIVE_IMPACT_FIELDS = [
+  ['研究版本', 'research'], ['交易计划', 'plans'], ['动态执行', 'executions'],
+  ['决策台账', 'ledger'], ['交易流水', 'trades']
+];
+
+function archiveImpactGrid(im) {
+  return `<div class="archive-impact">${ARCHIVE_IMPACT_FIELDS
+    .map(([label, key]) => `<div><span>${label}</span><b>${Number(im[key] || 0)}</b></div>`)
+    .join('')}</div>`;
+}
+
+function archiveTargetHtml(im) {
+  return `<div class="archive-target"><b>${esc(im.name)}</b>
+    <span>${esc(im.code)} · ${esc(im.exchange)}</span>${statusBadge(im.status)}</div>`;
+}
+
+async function openArchiveModal(id) {
+  let im;
+  try { im = await api('/api/securities/' + id + '/archive-impact'); } catch (e) { return; }
+  if (im.is_archived) return openRestoreModal(id);
+  const warn = im.status === '持仓中'
+    ? '<p class="archive-warn">该标的当前状态为「持仓中」—— 归档只是从工作台隐藏，'
+      + '<b>不会改变状态，也不会删除任何持仓或交易记录</b>。</p>'
+    : '';
+  openModal('归档标的', `
+    ${archiveTargetHtml(im)}
+    <p class="archive-lead">归档后该标的从工作台隐藏，下列历史<b>全部原样保留</b>，随时可以恢复：</p>
+    ${archiveImpactGrid(im)}
+    <p class="archive-note">共 <b>${Number(im.total || 0)}</b> 条记录<b>不会被删除</b>；
+      本次归档会在决策台账追加 1 条「标的归档」记录。</p>
+    ${warn}
+    <label class="archive-reason"><span>归档原因（可选，写入决策台账）</span>
+      <input name="reason" maxlength="200" placeholder="例如：研究逻辑已被推翻 / 误录入"></label>
+  `, async fd => {
+    const res = await api('/api/securities/' + id + '/archive',
+      { method: 'POST', body: { reason: String(fd.get('reason') || '') } });
+    closeDrawer();
+    await loadAll();
+    await render();
+    toast(res.changed ? ('已归档 · ' + res.name) : (res.name + ' 本就处于归档状态'));
+  }, '确认归档');
+}
+
+async function openRestoreModal(id) {
+  let im;
+  try { im = await api('/api/securities/' + id + '/archive-impact'); } catch (e) { return; }
+  if (!im.is_archived) { toast('该标的当前未归档'); return; }
+  openModal('恢复标的', `
+    ${archiveTargetHtml(im)}
+    <p class="archive-lead">恢复后该标的重新出现在工作台，
+      研究 / 计划 / 执行 / 台账<b>没有任何改动</b>。</p>
+    ${archiveImpactGrid(im)}
+    <p class="archive-note">归档于 ${esc(String(im.archived_at || '').slice(0, 19))}；
+      本次恢复会在决策台账追加 1 条「标的恢复」记录。</p>
+  `, async () => {
+    const res = await api('/api/securities/' + id + '/unarchive', { method: 'POST', body: {} });
+    await loadAll();
+    await render();
+    toast('已恢复 · ' + res.name);
+  }, '确认恢复');
+}
+
+function uiArchivedRow(s) {
+  const bits = [];
+  if (s.research) bits.push('研究 v' + s.research.version);
+  if (s.plan) bits.push('计划 v' + s.plan.version);
+  if (s.execution_latest) bits.push('执行 ' + (s.execution_latest.execution_date || ''));
+  bits.push('归档于 ' + String(s.archived_at || '').slice(0, 16));
+  return `<div class="archive-row" data-archived-id="${s.id}">
+    <div class="archive-row-main"><b>${esc(s.name)}</b>
+      <span>${esc(s.code)} · ${esc(s.exchange)} · ${esc(s.market || '')}</span></div>
+    <div class="archive-row-meta">${statusBadge(s.status)}<span>${esc(bits.join(' · '))}</span></div>
+    <button type="button" class="btn sm ghost" onclick="openRestoreModal(${s.id})">恢复</button>
+  </div>`;
+}
+
+function uiArchivedSection() {
+  const list = S.archived || [];
+  if (!list.length) return '';
+  return `<section class="work-section archive-section">
+    <div class="section-heading"><div><div class="section-kicker">ARCHIVED / RESTORE</div>
+      <h2>已归档</h2></div><span>${list.length} 个标的</span></div>
+    <details class="candidate-disclosure"><summary>默认折叠 · ${list.length} 个标的
+      （历史完整保留，可恢复）</summary>
+      <div class="archive-list">${list.map(uiArchivedRow).join('')}</div></details></section>`;
+}
+
 function uiCardHtml(s, compact) {
   const q = quoteOf(s), d = decOf(s.currency), plan = s.plan || {};
   const exec = s.execution_latest;
@@ -1559,6 +1654,10 @@ function uiCardHtml(s, compact) {
   const risk = life.risk || ((s.research && s.research.core_validations) || []).some(v => v.status === '已恶化');
   const bucketClass = 'lifecycle-' + life.bucket;
   return `<article class="terminal-card lifecycle-card ${compact ? 'compact-card' : ''} ${bucketClass} ${risk ? 'has-risk' : ''}" tabindex="0" data-sec-id="${s.id}" onclick="location.hash='#/s/${s.id}'">
+    <button type="button" class="card-archive" data-archive-id="${s.id}"
+      title="归档该标的：从工作台隐藏，研究/计划/执行/台账全部保留，可随时恢复"
+      aria-label="归档 ${esc(s.name)}"
+      onclick="event.stopPropagation();event.preventDefault();openArchiveModal(${s.id})">×</button>
     <div class="terminal-card-head">
       <div class="identity"><div class="identity-name">${esc(s.name)}</div><div class="identity-code">${esc(s.code)} · ${esc(s.exchange)} · ${esc(s.market || '')}</div></div>
       ${statusBadge(s.status)}
@@ -1591,6 +1690,7 @@ function renderTerminalHome(el) {
     ${section('first', '价格观察', 'WAITING / FIRST ENTRY', groups.first, false)}
     ${section('core', '核心观察', 'CORE / EVIDENCE', groups.core, true)}
     <section class="work-section lifecycle-candidate-section"><div class="section-heading"><div><div class="section-kicker">RESEARCH / CANDIDATES</div><h2>候补研究</h2></div><span>${groups.candidate.length} 个标的</span></div><details class="candidate-disclosure" ${groups.candidate.length ? '' : 'open'}><summary>默认折叠 · ${groups.candidate.length} 个标的</summary>${groups.candidate.length ? `<div class="terminal-grid">${groups.candidate.map(s => uiCardHtml(s, true)).join('')}</div>` : '<div class="empty-state"><div><b>暂无候补标的</b></div></div>'}</details></section>
+    ${uiArchivedSection()}
   </div>`;
 }
 
@@ -1683,9 +1783,13 @@ function setupTerminalInteractions() {
 
 document.addEventListener('keydown', e => {
   const active = document.activeElement;
-  const editing = active && (active.matches('input, textarea, select, [contenteditable="true"]') || active.isContentEditable);
+  // 焦点落在**任何**可交互控件时，页面级快捷键一律让路。
+  // 必须含 button / a[href]：否则 Tab 聚焦到卡片右上角的「×」后按 Enter，
+  // 会被下面 `e.key === 'Enter'` 分支先 preventDefault（按钮的默认点击被吞），
+  // 结果是"想归档却跳去了详情页"——键盘用户完全无法归档。
+  const onControl = active && (active.matches('a[href], button, input, textarea, select, [contenteditable="true"]') || active.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#command-input')?.focus(); return; }
-  if (editing) return;
+  if (onControl) return;
   if (e.key === 'Escape' && S.drawerId) { e.preventDefault(); closeDrawer(); return; }
   if (S.drawerId && e.key.toLowerCase() === 'e') { e.preventDefault(); openExecutionModal(S.drawerId); return; }
   if (S.drawerId && e.key.toLowerCase() === 't') { e.preventDefault(); openTradeModal(S.drawerId); return; }
