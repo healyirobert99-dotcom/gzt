@@ -19,7 +19,8 @@ PRAGMA foreign_keys=ON；而 decision_ledger 是 append-only、必须保留"当�
   §C  HTTP 层（真实 ThreadingHTTPServer）：?archived= 白名单、404/400、影响面接口
   §D  前端静态契约：× 在右上角、默认不可见、悬停显形、阻止冒泡、影响面弹窗、
       键盘守卫（Enter 不得吞掉按钮点击）、**归档不得连带丢掉 A/H 关联**（§D#9）、
-      **归档是可见性开关而非只读**（§D#10：操作入口不得静默失效）、
+      **归档是可见性开关而非只读**（§D#10：7 个弹窗走 findSec；§D#10d/e：抽屉的
+      「··· 更多」必须是**纯 id 转发器**，不得自行过滤活跃列表，否则 4 项一并静默失效）、
       **归档 × 导入路径**（§D#11：匹配不按归档过滤，导入绝不复活归档/伪造归档事件）、
       **归档标的的行情展示兜底**（§D#12：无行情不得渲染 undefined/NaN）
 
@@ -754,12 +755,26 @@ def test_d_frontend_contract():
          '直接查活跃列表=%d 处；走 findSec 的入口=%d 个'
          % (len(re.findall(r'const s = S\.secs\.find', js)),
             js.count('const s = findSec(id); if (!s) return;')))
+    # §D#10c 只保证了"7 个弹窗各自走 findSec"。抽屉上「··· 更多」是把 id **透传**给其中
+    # 4 个弹窗的转发器：若有人图省事改成 `openMoreActions(s)` 或在此处先查一次活跃列表，
+    # 已归档标的的「变更状态 / 修改计划 / 编辑基本信息 / 添加决策记录」会一并静默失效
+    #（浏览器层 §E8#1~#4 锁定该行为；§E9#1 活跃标的为对照组）。
+    m_more = re.search(r'function openMoreActions\(id\) \{(.*?)\n\}', js, re.S)
+    more = m_more.group(1) if m_more else ''
+    step('§D#10d 「··· 更多」是纯转发器：只把 id 透传给 4 个弹窗，自身不查标的',
+         len(more) > 0 and 'S.secs' not in more and 'findSec' not in more
+         and more.count('openModal(') == 1,
+         'body=%r' % more[:160])
+    step('§D#10e 「··· 更多」的 4 项都把原始 id 传下去（4/4，无一被替换成对象）',
+         len(re.findall(r'onclick="closeModal\(\);open\w+Modal\(\$\{id\}\)"', more)) == 4,
+         '透传项=%d 个'
+         % len(re.findall(r'onclick="closeModal\(\);open\w+Modal\(\$\{id\}\)"', more)))
 
     # D11 归档 × 导入路径（服务端同型面）
     # 「被过滤集合」检查法的第三个面：导入流程按 exchange+code 匹配标的。
     # 结论：匹配**不应**按归档过滤（身份只认 exchange+code），但导入也**绝不能**
     # 复活归档、改写 archived_at 或伪造归档/恢复事件。动态证据见
-    # .tmp_v108x/verify/check_archive_import.py（39 断言，含真实仓库版 DB 快照）。
+    # .tmp_v108x/verify/check_archive_import.py（38 断言，含真实仓库版 DB 快照）。
     src = read_text('app/server.py')
 
     def fbody(name):

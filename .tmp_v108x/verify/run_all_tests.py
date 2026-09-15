@@ -4,7 +4,7 @@
 不用 shell 循环 + 管道：本环境里复合命令/管道容易被 SIGTERM 静默掉。
 
 各套件的汇总格式**互不统一**（实测）：
-  test_security_archive.py   「汇总：TOTAL=122  PASS=122  FAIL=0  SKIP=0」
+  test_security_archive.py   「汇总：TOTAL=124  PASS=124  FAIL=0  SKIP=0」
   test_data_update_btn.py    「数据更新按钮测试: PASS 42 / FAIL 0 / SKIP 0  (共 42 断言)」
   test_v102 / v109 / v110    「总计: PASS 38    FAIL 0」/「v1.0.9 测试: PASS 83 / FAIL 0 (共 83 断言)」
   test_v103/105/106/107/108  只打 `FAIL_COUNT = 0`（v105 例外，有汇总行）
@@ -13,9 +13,11 @@
 数 `[PASS]` / `[FAIL]` 断言行 + FAIL_COUNT。
 
 本脚本**不含**下列进程内/浏览器探针（它们依赖真实库副本或 Chromium，见 MEMORY.md）：
-  check_archive_import.py（归档×导入，进程内 39 断言）、
-  browser_e2e_archive.py（38）、browser_e2e_archive_edge.py（32）、
-  check_ah_link_archive.py（11）、neg_archive_import_contract.py（负向 8）。
+  check_archive_import.py（归档×导入，进程内 38 断言）、
+  browser_e2e_archive.py（38）、browser_e2e_archive_edge.py（37）、
+  check_ah_link_archive.py（11）、
+  neg_archive_import_contract.py（负向 12：§D#10d/#10e + §D#11 + §D#12）、
+  neg_findsec_browser.py（负向 6：浏览器层回退 findSec）。
 """
 import os
 import re
@@ -42,8 +44,9 @@ BASELINE = {
     'tests/test_v109.py': 83, 'tests/test_v110.py': 14,
     'tests/test_data_update_btn.py': 42,
     'tests/test_integration_quote.py': 14,
-    'tests/test_security_archive.py': 122,      # 113 + §D#11 共 6 条（归档×导入）
+    'tests/test_security_archive.py': 124,      # 113 + §D#11 共 6 条（归档×导入）
                                                 # + §D#12 共 3 条（行情兜底）
+                                                # + §D#10d/e 共 2 条（「··· 更多」转发器）
 }
 
 RE_SUM = re.compile(r'PASS[ =:]+(\d+).*?FAIL[ =:]+(\d+)')

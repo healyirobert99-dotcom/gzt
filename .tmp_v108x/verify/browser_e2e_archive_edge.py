@@ -10,6 +10,9 @@
   E3. 已归档标的对「默认列表 / 标的库页」彻底不可见（接口与 UI 一致）
   E4. 全归档仍可逆 —— 从「已归档」区点恢复，首页卡片由 0 回到 1，再全量恢复回原值
   E5. 隔离性 —— 全程只操作副本，真实库逐字节未变
+  E7. 已归档标的详情页的 4 个操作入口不得**静默失效**（含 1 个对照组）
+  E8. 「··· 更多」菜单里的 4 项也必须真点得开（打开菜单 ≠ 点中菜单项）
+  E9. 对照组：同一条点击链在**活跃**标的上同样成立（排除"选择器碰巧命中"）
 
 跑法：
     1) 后台任务起沙箱服务（真实库副本 + 端口 8805）：
@@ -80,6 +83,22 @@ def drawer_action_batch(sid, nth, wait_ms=7000):
 
 def modal_text(out):
     return '\n'.join(text_blocks(out))
+
+
+def more_action_batch(sid, nth, wait_ms=7000):
+    """详情抽屉 → 点「··· 更多」→ 点菜单第 nth 项 → 读弹窗文本（§E8）。
+
+    判据必须用**只在该弹窗里出现**的文案，不能用菜单自身的标签：
+    菜单标签「变更状态 / 修改交易计划 / 编辑基本信息 / 添加决策记录」在
+    「点击落空、菜单还开着」时会**假通过**。故一律取各弹窗的字段标签。
+    """
+    close_all()
+    return batch('set viewport 1280 1300', 'open %s/#/s/%d' % (BASE, sid),
+                 'wait %d' % wait_ms,
+                 'click .drawer-actions>button:nth-child(4)',   # ··· 更多
+                 'wait 1500',
+                 'click .more-actions>button:nth-child(%d)' % nth,
+                 'wait 2000', 'get text .modal')
 
 
 def main():
@@ -200,6 +219,21 @@ def main():
              marker in mtxt,
              '未读到含「%s」的弹窗；读到=%r' % (marker, mtxt[:90]))
 
+    # ---------- §E8 「··· 更多」菜单内的 4 项（face ② 的最后一个子面）----------
+    # §E7 只证明了「··· 更多」能弹出菜单；菜单里 4 项各自还会再走一次 findSec。
+    # 打开菜单 ≠ 点中菜单项，所以必须真点一次，且判据不能用菜单标签（见 more_action_batch）。
+    print('\n§E8 已归档标的：「··· 更多」菜单里的 4 项也仍可用')
+    more_cases = [(1, '变更状态', '新状态'),
+                  (2, '修改交易计划', '修改说明（记入台账）'),
+                  (3, '编辑基本信息', 'A/H 两地上市关联'),
+                  (4, '添加决策记录', '记录内容（必填）')]
+    for nth, label, body_marker in more_cases:
+        mtxt = modal_text(more_action_batch(sid, nth))
+        step('§E8#%d 已归档标的：「··· 更多 → %s」弹出对应弹窗（判据取该弹窗独有的字段标签）'
+             % (nth, label),
+             body_marker in mtxt,
+             '未读到「%s」；读到=%r' % (body_marker, mtxt[:90]))
+
     # ---------- §E3 已归档标的的不可见性 ----------
     print('\n§E3 已归档标的对默认列表 / 标的库页彻底不可见')
     _, active_now = req('/api/securities')
@@ -255,6 +289,14 @@ def main():
          ledger_total() == base_ledger + 2 * n_all,
          '%d → %d（期望 %d）' % (base_ledger, ledger_total(),
                                  base_ledger + 2 * n_all))
+
+    # ---------- §E9 对照组：同一套点击链在**活跃**标的上同样成立 ----------
+    # 没有这条，§E8 的绿也可能是"选择器碰巧命中了别的东西"。
+    print('\n§E9 对照组：活跃标的走同一条点击链（证明 §E8 的选择器本身有效）')
+    sid_active = act_final[0]['id']
+    ctrl = modal_text(more_action_batch(sid_active, 1))
+    step('§E9#1 活跃标的：「··· 更多 → 变更状态」同样弹出「新状态」',
+         '新状态' in ctrl, '读到=%r' % ctrl[:90])
 
     # ---------- §E5 隔离性 ----------
     print('\n§E5 隔离性：全程只操作副本')

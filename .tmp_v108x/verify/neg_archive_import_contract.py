@@ -12,6 +12,10 @@
   M2  _import_apply_one 里读 archived_at（导入层开始触碰归档状态）
   M3  在 _set_archived_at 之外再造一个 archived_at 写入口（双写入口 = 未来必然漂移）
   M4  删掉 app.js 的「暂无行情」兜底（已归档标的行情渲染成空）
+
+另两个注入（对应 §D#10d / §D#10e，「··· 更多」转发器）：
+  M5  openMoreActions 里先查一次活跃列表再 return → 已归档标的 4 项一并静默失效
+  M6  某一项把 ${id} 换成 ${s.id} → 不再是"纯 id 透传"，4 项不再一致
 """
 import os
 import re
@@ -91,6 +95,25 @@ def _impact_after(sid):""",
         new=None,
         replace_all=('暂无行情', ''),
     ),
+    dict(
+        key='M5',
+        expect='§D#10d 「··· 更多」是纯转发器',
+        desc='openMoreActions 里先查一次活跃列表（已归档标的的 4 项会一并失效）',
+        target='app/static/app.js',
+        old="""function openMoreActions(id) {
+  openModal('更多操作', `<div class="more-actions">""",
+        new="""function openMoreActions(id) {
+  const s = S.secs.find(x => x.id === Number(id)); if (!s) return;
+  openModal('更多操作', `<div class="more-actions">""",
+    ),
+    dict(
+        key='M6',
+        expect='§D#10e 「··· 更多」的 4 项都把原始 id 传下去',
+        desc='把某一项的 ${id} 换成 ${s.id}（不再是纯 id 透传）',
+        target='app/static/app.js',
+        old='onclick="closeModal();openStatusModal(${id})">变更状态',
+        new='onclick="closeModal();openStatusModal(${s.id})">变更状态',
+    ),
 ]
 
 
@@ -126,7 +149,7 @@ def run_case(mut):
 
 def main():
     print('=' * 78)
-    print('负向验证：§D#11 / §D#12 新断言是否真的会翻红')
+    print('负向验证：§D#10d/#10e + §D#11 / §D#12 新断言是否真的会翻红')
     print('=' * 78)
     for mut in MUTATIONS:
         res, err = run_case(mut)

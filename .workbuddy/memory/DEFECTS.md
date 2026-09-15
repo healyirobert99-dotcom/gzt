@@ -8,10 +8,11 @@
 
 - 2026-09-14 顶栏「数据更新」按钮：`tests/test_data_update_btn.py`（42）+ 负向
   `neg_data_update_btn.py` + 端到端 `e2e_data_update_btn.py`。
-- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（122）+
-  浏览器 `browser_e2e_archive.py`（38）/ `browser_e2e_archive_edge.py`（32）/
+- 2026-09-15 卡片右上角「×」归档/恢复：`tests/test_security_archive.py`（124）+
+  浏览器 `browser_e2e_archive.py`（38）/ `browser_e2e_archive_edge.py`（37）/
   `check_ah_link_archive.py`（11）+ 进程内 `check_archive_import.py`（38）+
-  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`。
+  负向 `neg_security_archive.py` / `neg_archive_import_contract.py`（12，6 次注入）/
+  `neg_findsec_browser.py`（6，浏览器层回退 findSec → §E7#1~3 + §E8#1~4 共 7 条翻红）。
 
 ## v1.0.9（封板，R-027 / R-028）
 
@@ -56,7 +57,9 @@
   （书签 / 后退 / 标的库的 A/H 链接）打开已归档标的时，详情抽屉的「更新动态执行 / 录入交易 /
   查看研究 / ··· 更多」**全部静默失效**（后端并没有任何 mutation 端点校验 `archived_at`，
   本就允许编辑）。修法：`findSec` 改为**活跃 → 已归档**两级查找（活跃优先）。
-  锁 `§D#10` + 边界 `§E7`（修正前 3 红，对照组「··· 更多」绿）。
+  锁 `§D#10`（含 `#10d/e`：抽屉的「··· 更多」必须是**纯 id 转发器**，自己不得查活跃列表，
+  否则菜单里 4 项会一并失效）+ 边界 `§E7`（4 项入口）+ `§E8`（「更多」菜单内 4 项）
+  + `§E9`（活跃标的对照组）。修正前：边界脚本 3 红、菜单内 4 红，浏览器层负向 7 条全红。
 - **导入路径不得触碰归档**（边界检查新增）：导入按 `exchange+code` 匹配，**不按归档过滤**
   （否则归档标的再也导不进来）；但 `preview/commit_import_full`、`_import_apply_one`、
   `_import_full_diff`、`_import_snapshot_for`、`preview/commit_import_execution` 这 **7 个函数体
@@ -64,7 +67,7 @@
   绝不复活归档、不改写时间戳、不伪造归档/恢复事件。`archived_at` 全项目**只有 1 个写入口**
   `_set_archived_at`。锁 `§D#11`（6 条）；进程内证据 `check_archive_import.py`（38，含真实仓库版
   DB 快照上"init_db 幂等补列且不触发 do_migration"）；负向 `neg_archive_import_contract.py`
-  （4 次注入全部按预期翻红）。
+  （6 次注入全部按预期翻红，含 §D#10d/e 两次）。
 - **归档标的的行情必须走兜底**：行情只对 `S.secs` 拉取 → 已归档标的 `quoteOf()` 返回 null，
   全部渲染点（含详情抽屉）须有「暂无行情」兜底，`uiMiniChart` 须判空（否则整抽屉渲染崩）。
   锁 `§D#12`（3 条）。

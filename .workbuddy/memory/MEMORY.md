@@ -95,7 +95,7 @@
    净变化必须有来源）。
 2. **负向验证**：新断言必须"反向打坏"确认会红（`.tmp_v108x/verify/neg_*.py`）。
 3. **真实浏览器**（真实服务 + 真实 Chromium，沙箱端口 8805，库用副本）：
-   `browser_e2e_archive.py`（38）+ `browser_e2e_archive_edge.py`（32）+
+   `browser_e2e_archive.py`（38）+ `browser_e2e_archive_edge.py`（37）+
    `check_ah_link_archive.py`（11）；起服务 `sandbox_server.py 8805`（后台任务），收尾
    `kill_port.py 8805` 按端口杀进程树。**先读 `ENV-TRAPS.md` ⑪⑩⑦⑤④，别先怀疑产品。**
 4. **进程内探针**（不起服务）：monkeypatch `server.DB_PATH` 到真实库副本，**真实库 SHA-256
