@@ -1,0 +1,16 @@
+tests/test_v102.py               总计: PASS 38    FAIL 0                                     
+tests/test_v103.py               （无汇总行；按断言行计数）                                             
+tests/test_v105.py               v1.0.5 测试: PASS 25 / FAIL 0  (共 25 断言)                    
+tests/test_v106.py               （无汇总行；按断言行计数）                                             
+tests/test_v107.py               （无汇总行；按断言行计数）                                             
+tests/test_v108.py               （无汇总行；按断言行计数）                                             
+tests/test_v109.py               v1.0.9 测试: PASS 83 / FAIL 0  (共 83 断言)                    
+tests/test_v110.py               v1.0.10 测试: PASS 14 / FAIL 0  (共 14 断言)                   
+tests/test_data_update_btn.py    数据更新按钮测试: PASS 42 / FAIL 0 / SKIP 0  (共 42 断言)            
+tests/test_integration_quote.py  总计: PASS 14    FAIL 0    SKIP 0                           
+tests/test_security_archive.py   汇总：TOTAL=135  PASS=135  FAIL=0  SKIP=0                    
+
+======================================================================
+合计：TOTAL=695  PASS=695  FAIL=0  SKIP=0
+基线核对：全部一致
+======================================================================
