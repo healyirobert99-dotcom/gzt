@@ -41,7 +41,7 @@
 ## 已修复缺陷（不得回退；详见 `DEFECTS.md`）
 - **R-027/R-028**：同 token 并发重复追加 execution → claim 须在锁内原子置位 `in_flight`；并发锁只把 `SQLITE_BUSY`(5)/`SQLITE_LOCKED`(6) 转 409，其余仍 500。
 - **启动器**：不得退回 `where python`（Store 存根机双击起不来）。**force**：只认 `force ∈ {1,true,yes,on}`，须绕开 8 秒缓存。
-- **归档六条**（锁 `§B#5d §D#7 §D#9 §D#10 §D#11 §D#12 §D#13~#13c §D#14/#14b`）：① 补列不依赖 schema_version；② 迁移重建 DDL 列集合 == `INSERT…SELECT` 复制列（漏列 = 静默清空）；③ A/H 下拉须补回已归档关联项；④ 取标的必须走 `findSec`；⑤ 导入不触碰 `archived_at`、行情须「暂无行情」兜底；⑥「×」必须键盘可达。
+- **归档六条**（锁 `§B#5d §D#7 §D#9 §D#10 §D#11 §D#12 §D#13~#13c §D#14/#14b §D#15/#15b`）：① 补列不依赖 schema_version；② 迁移重建 DDL 列集合 == `INSERT…SELECT` 复制列（漏列 = 静默清空）；③ A/H 下拉须补回已归档关联项；④ 取标的必须走 `findSec`；⑤ 导入不触碰 `archived_at`、行情须「暂无行情」兜底；⑥「×」必须键盘可达且**不被放大后压住徽章**。
 
 ## 验证约定（六项；命令与陷阱见 ENV-TRAPS.md / feature-verify 技能）
 1. **离线契约** `run_all_tests.py`（必带**基线交叉核对**；断言数净变化必须有来源）。
@@ -50,7 +50,8 @@
 4. **进程内探针**：monkeypatch `server.DB_PATH` 到库副本，**真实库 SHA 前后必须一致**（`4f4832aa51d00b51…`）。
 5. **并发探针**（append-only / token 类改动必跑）：线程池 + `Barrier`，断言为**与调度无关的不变式**，禁止写死某次观测值。
 6. **「被过滤集合」四问**：① 表单/下拉 → 静默改值 ② 入口查找 → 静默失效 ③ 展示 → 通常正确 ④ **中转层（转发器）也是操作入口**。能加对照组就加。
-7. **真实库隔离性不能用 sha256 判**（09-16 更新）：8765 上自己的实例在跑时，60 秒行情轮询必然改真实库字节。只认「**业务数据不变 + 字节变化只限行情两列**」（业务指纹必须排除行情两列），并记录写者 PID。**收尾还原走 `POST /api/securities/{id}/unarchive` 接口，不用浏览器点击**。`get box` 读数带标签，禁止 `findall` 抓数字。详见 ENV-TRAPS ⑯⑰⑱。
+7. **真实库隔离性不能用 sha256 判**（09-16 更新）：8765 上自己的实例在跑时，60 秒行情轮询必然改真实库字节。只认「**业务数据不变 + 字节变化只限行情两列**」（业务指纹必须排除行情两列），并记录写者 PID。**收尾还原走 `POST /api/securities/{id}/unarchive` 接口，不用浏览器点击**。`get box` 读数带标签，禁止 `findall` 抓数字。详见 ENV-TRAPS ⑯⑰⑱⑳。
+8. **绝对定位元素不参与文档流 → 布局耦合必须显式断言**（09-16 新增，锁 `§D#15`）：卡片右上角「×」是 `position:absolute`，**它不会把邻居挤开**，全靠 `.terminal-card-head { padding-right }` 人工预留。不变式：`card.padding-right + head.padding-right (14+24=38) > right + width (9+20=29)`，差值即实测间隙 9px。改 padding 或放大 × 都必须同步改预留。量几何时注意 **border-box ≠ padding-box**（实测偏移 = CSS 值 + border-width），期望值要从 DOM 推导、**不许写死**（ENV-TRAPS ⑲）。
 
 ## 待批准 / 开放项（不得自行推进）
 - **Ctrl+K 搜不到已归档标的**：① 保持现状 ② 纳入搜索并标注「已归档」。

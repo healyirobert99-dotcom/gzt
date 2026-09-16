@@ -868,6 +868,58 @@ def test_d_frontend_contract():
          and '该标的当前未归档' in rst_body,
          'body=%r' % rst_body[:120])
 
+    # D15 「×」不得压住卡片右上角的状态徽章（布局耦合，此前零覆盖）
+    # 「×」是 position:absolute，**不参与文档流**，所以它的邻居不会被自动挤开：
+    # 完全依赖 `.terminal-card-head { padding-right }` 人工预留的槽位。
+    # 参照系都按卡片的 padding box 右边缘算：
+    #     × 的占位   = right + width
+    #     头部预留   = 卡片自身 padding-right + head 的 padding-right
+    #     不变式     = 头部预留 > × 占位（差值就是实测的视觉间隙）
+    # 实测（probe_geometry_archive_btn.py，26 断言 / 4 个视口 1440→560px）：
+    #     17/17 张卡片 × 均完整落在卡片内、距上/右各 10px(=9px CSS + 1px border)、
+    #     热区恒 20×20px、与徽章间隙**跨视口恒为 9.0px**（卡片宽度从 419px 缩到
+    #     253px 仍不变），徽章一次都没被压住。
+    # 这条契约守的是"**别把人工预留改没了**"：把 head 的 padding-right 删掉、
+    # 或把 × 放大到超过预留量，都会翻红（负向注入 M13 验证）。
+    def _rule_bodies(sel):
+        # 只匹配 `sel {`（紧跟左花括号），避免误吞 `.sel:hover` / `.sel, .other`
+        return re.findall(re.escape(sel) + r'\s*\{([^}]*)\}', css)
+
+    card_pr = None
+    for body in _rule_bodies('.terminal-card'):
+        # 不能加 `^\s*` 锚点：多条 .terminal-card 规则是**单行**写的，padding 不在行首
+        m = re.search(r'\bpadding:\s*([^;]+);', body)
+        if m:
+            parts = m.group(1).split()
+            # 简写：1 值=四边 / 2 值=上下·左右 / 3 值=上·左右·下 / 4 值=上·右·下·左
+            v = parts[1] if len(parts) >= 2 else parts[0]
+            if v.endswith('px'):
+                card_pr = float(v[:-2])   # 取"最后一条声明了 padding 的 .terminal-card"
+    m_hp = None
+    for body in _rule_bodies('.terminal-card-head'):
+        m = re.search(r'padding-right:\s*([\d.]+)px', body)
+        if m:
+            m_hp = float(m.group(1))
+    head_pr = m_hp
+    m_arch = re.search(r'\n\.card-archive \{(.*?)\n\}', css, re.S)
+    arch_rule = m_arch.group(1) if m_arch else ''
+    m_right = re.search(r'right:\s*([\d.]+)px', arch_rule)
+    m_width = re.search(r'width:\s*([\d.]+)px', arch_rule)
+    arch_right = float(m_right.group(1)) if m_right else None
+    arch_w = float(m_width.group(1)) if m_width else None
+
+    ok_parse = all(v is not None for v in (card_pr, head_pr, arch_right, arch_w))
+    reserved = (card_pr + head_pr) if ok_parse else None
+    footprint = (arch_right + arch_w) if ok_parse else None
+    step('§D#15 × 不压住状态徽章：头部预留 > × 占位'
+         '（card.padding-right %s + head.padding-right %s = %s > right %s + width %s = %s）'
+         % (card_pr, head_pr, reserved, arch_right, arch_w, footprint),
+         ok_parse and reserved > footprint,
+         'rule=%r' % arch_rule[:120])
+    step('§D#15b 预留留有余量（间隙 = 预留 − 占位 ≥ 4px，避免亚像素/字体渲染下贴死）',
+         ok_parse and (reserved - footprint) >= 4.0,
+         'gap=%s' % (None if not ok_parse else reserved - footprint))
+
     # D11 归档 × 导入路径（服务端同型面）
     # 「被过滤集合」检查法的第三个面：导入流程按 exchange+code 匹配标的。
     # 结论：匹配**不应**按归档过滤（身份只认 exchange+code），但导入也**绝不能**

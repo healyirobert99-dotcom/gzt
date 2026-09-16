@@ -1,0 +1,41 @@
+test(archive): 补第八面「×」的几何实测 + 布局耦合契约 §D#15/#15b
+
+用户原话是"在右上角出现一个叉"。此前所有验证只断言过 opacity / pointer-events
+（"悬停才显形"），**从没量过它到底在哪、有没有压住别的东西**。
+CSS 里 .terminal-card-head { padding-right: 24px } 看着就是为 × 预留的槽位，
+但那是推导 —— 补一次实测。
+
+新增 probe_geometry_archive_btn.py（26 断言，1440/1000/768/560px 四视口 × 17 卡片）：
+- ① × 完整落在卡片内（不被 overflow:hidden 裁切）        17/17 × 4 视口
+- ② × 距右/上边缘恒为 10px（= 9px CSS + 1px border）      4 视口全同
+- ③ × 与状态徽章不重叠，最小间隙 9.0px                    17/17 有徽章
+- ④ × 热区恒 20×20px                                      4 视口全同
+- ⑥ 间隙跨视口恒定（卡片宽 419→253px 仍 9.0px）           ← 不变式
+- ⑦ 卡片宽度确实随视口变化（4 种）                         ← 防"没动"的假绿
+结论：无缺陷。560px 窄视口下同样不压徽章、不越界、不变形。
+
+新增离线契约 §D#15/#15b（133 → 135 断言）——锁定布局耦合：
+  position:absolute 不参与文档流，邻居不会被自动挤开，全靠人工预留。
+    × 占位   = right + width                          = 9 + 20 = 29
+    头部预留 = card.padding-right + head.padding-right = 14 + 24 = 38
+    不变式：预留 > 占位（差值 9px 即实测间隙）
+  解析要点：简写取第 2 个分量；多规则取最后一条声明该属性的；**不能加 ^ 锚点**
+  （多条 .terminal-card 是单行写的，padding 不在行首 → 首跑解析出 None）。
+
+负向验证 M13/M14（14 次注入 / 28 断言，全绿）：
+- M13 把 head 的 padding-right 清零      → §D#15 红
+- M14 把 × 放大到 40px 却不改预留        → §D#15 红
+
+顺带修的脚手架缺陷：
+- 几何探针首跑 8 条 FAIL 全是**探针自己**：getBoundingClientRect 量的是 border-box，
+  而 absolute 的 top/right 相对 padding box → 实测 = CSS 值 + border-width。
+  修法不是把期望改成 10.0（那是魔数），而是从 DOM 读 border-width 推导。
+- run_all_tests.py 现在凡 FAIL>0 就把该套件**全量输出**落盘：
+  本轮出现 test_integration_quote.py 13/1 一次，单跑 3 次均 14/14，
+  属瞬时网络波动（该套件会打真实行情接口并回写真实库）；
+  但"红了却拿不到是哪条"本身就是缺陷 —— 已补留痕。
+
+记忆：ENV-TRAPS ⑲（border-box≠padding-box）⑳（偶发红必须留现场）；
+MEMORY.md 验证约定新增第 8 条（绝对定位 → 布局耦合必须显式断言）。
+
+注：data/workbench.db 仍未纳入提交，待用户拍板。

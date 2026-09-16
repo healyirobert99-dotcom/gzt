@@ -28,6 +28,8 @@
 再两个注入（对应 §D#14 / §D#14b，连点两下提交）：
   M11 归档 toast 恒定报「已归档」→ 连点两下会谎报第二次归档
   M12 去掉恢复弹窗的前提守卫 → 对未归档标的也会发恢复请求
+  M13 把 head 为 × 预留的 padding-right 清零 → 徽章滑到 × 底下
+  M14 把 × 放大到 40px 却不改预留 → 占位超过预留量，压住徽章
 """
 import os
 import re
@@ -183,6 +185,22 @@ def _impact_after(sid):""",
         target='app/static/app.js',
         old="  if (!im.is_archived) { toast('该标的当前未归档'); return; }",
         new='  /* 注入：去掉前提守卫 */',
+    ),
+    dict(
+        key='M13',
+        expect='§D#15 × 不压住状态徽章',
+        desc='把 head 为 × 预留的 padding-right 清零（徽章会滑到 × 底下）',
+        target='app/static/style.css',
+        old='.terminal-card-head { padding-right: 24px; }',
+        new='.terminal-card-head { padding-right: 0; }',
+    ),
+    dict(
+        key='M14',
+        expect='§D#15 × 不压住状态徽章',
+        desc='把 × 放大到 40px 却不改预留（占位超过预留量，压住徽章）',
+        target='app/static/style.css',
+        old='width: 20px; height: 20px; padding: 0;',
+        new='width: 40px; height: 20px; padding: 0;',
     ),
 ]
 

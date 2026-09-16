@@ -238,3 +238,32 @@ height: 401.53125
 **对策**：收尾/还原这类**纯清理**动作用 `POST /api/securities/{id}/unarchive`，
 确定性、可重复（见 `cleanup_sandbox_archive.py`）。
 浏览器点击只用于"验证交互"本身，不用于"恢复现场"。
+
+## ⑲ 量绝对定位元素：**border-box ≠ padding-box**（第三次"探针自己"报红）
+
+2026-09-16 实测：几何探针首跑 **8 条 FAIL**，全部是
+`× 距卡片边缘 = 10.0px`，而期望值写的是 CSS 里的 `top:9px; right:9px`。
+
+**不是产品问题**：`getBoundingClientRect()` 量的是 **border-box**；
+而 `position:absolute` 的 `top` / `right` 相对的是包含块的 **padding box**。
+卡片有 `border: 1px solid` → 实测偏移 = **CSS 值 + border-width**。
+
+**对策（重点在"别改成魔数"）**：不要图省事把期望改成 `10.0` —— 那是把
+border 宽度写死了。正确做法是**从 DOM 读出来推导**：
+`parseFloat(getComputedStyle(card).borderTopWidth)`，断言
+`实测偏移 == CSS 偏移 + border-width`。这样换皮肤 / 改边框粗细都不会假红。
+
+**通用形式**：任何"实测几何 vs CSS 声明值"的断言，先问一句
+**"这两个数在同一个参照系里吗？"**（border-box / padding-box / content-box /
+含滚动偏移 / 含 transform 缩放）。本会话三次假红分别来自：
+① 并发探针 delta 算式；② `eval` 引号被吃 + 块划分；③ 参照系不一致。
+
+## ⑳ 全套里红了、单跑却全绿 —— 先给套件**留失败现场**
+
+2026-09-16 实测：`run_all_tests.py` 报 `test_integration_quote.py 13 PASS / 1 FAIL`，
+但该套件**单独连跑 3 次都是 14/14**。这类"偶发红"最容易被含糊放过。
+
+该套件确实会**打真实行情接口**并回写真实库，天然受网络与外部实例影响。
+**对策**：`run_all_tests.py` 里凡 `FAIL>0` 就把该套件的**全量输出**落盘到
+`fail_<suite>.txt`（原来只保留一行汇总 → 事后根本无法归因）。
+没有现场的红，等于没看见。

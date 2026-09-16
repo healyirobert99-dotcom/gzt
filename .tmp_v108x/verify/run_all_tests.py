@@ -17,9 +17,10 @@
   browser_e2e_archive.py（38）、browser_e2e_archive_edge.py（37）、
   browser_e2e_archive_keyboard.py（24，纯键盘路径）、check_ah_link_archive.py（11）、
   concurrency_archive_probe.py（并发 12：归档/恢复 append-only 台账不变式）、
-  neg_archive_import_contract.py（负向 20：§C#15 + §D#10d/e/#13 + §D#11/#D#12，10 次注入）、
+  neg_archive_import_contract.py（负向 28：§C#15 + §D#10d/e/#13/#14/#15 + §D#11/#D#12，14 次注入）、
   neg_findsec_browser.py（负向 6：浏览器层回退 findSec）、
-  neg_keyboard_browser.py（负向 11：打坏 × 的键盘可达性）。
+  neg_keyboard_browser.py（负向 11：打坏 × 的键盘可达性）、
+  probe_geometry_archive_btn.py（几何 26：× × 状态徽章的多视口实测）。
 """
 import os
 import re
@@ -46,12 +47,13 @@ BASELINE = {
     'tests/test_v109.py': 83, 'tests/test_v110.py': 14,
     'tests/test_data_update_btn.py': 42,
     'tests/test_integration_quote.py': 14,
-    'tests/test_security_archive.py': 133,      # 113 + §D#11 共 6 条（归档×导入）
+    'tests/test_security_archive.py': 135,      # 113 + §D#11 共 6 条（归档×导入）
                                                 # + §D#12 共 3 条（行情兜底）
                                                 # + §D#10d/e 共 2 条（「··· 更多」转发器）
                                                 # + §C#15~#15d 共 4 条（并发归档 × 台账）
                                                 # + §D#13~#13c 共 3 条（× 的键盘可达性）
                                                 # + §D#14/#14b 共 2 条（连点两下提交）
+                                                # + §D#15/#15b 共 2 条（× 不压住状态徽章）
 }
 
 RE_SUM = re.compile(r'PASS[ =:]+(\d+).*?FAIL[ =:]+(\d+)')
@@ -92,6 +94,12 @@ for rel in SUITES:
     if got:
         t, pa, fa, sk, line = got
         total += t; passed += pa; failed += fa; skipped += sk
+        # 失败必须可归因：把该套件的**全量输出**落盘，否则"红过一次却拿不到
+        # 是哪条断言"——套件里含真实行情网络调用，偶发红更要留下现场。
+        if fa > 0:
+            with open(os.path.join(HERE, 'fail_%s.txt' % os.path.basename(rel)),
+                      'w', encoding='utf-8') as fh:
+                fh.write(out)
         flag = ''
         if rel in BASELINE and t != BASELINE[rel]:
             flag = '   ← 与基线 %d 不一致' % BASELINE[rel]
