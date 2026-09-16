@@ -73,6 +73,7 @@ def main():
     print('=' * 78)
 
     real0 = sha(REAL_DB)
+    biz0, secs0, _tally0 = B.real_snapshot()
     st, act = req('/api/securities')
     st2, arc = req('/api/securities?archived=only')
     if st != 200 or st2 != 200 or arc:
@@ -213,8 +214,13 @@ def main():
     print('\n§K8 台账与隔离性')
     step('§K8#1 台账恰好 +2（归档 / 恢复各追加 1 条，append-only）',
          ledger_total() == base_ledger + 2, '%d → %d' % (base_ledger, ledger_total()))
-    step('§K8#2 真实库 data/workbench.db 逐字节未变', sha(REAL_DB) == real0,
-         '%s → %s' % (real0[:16], sha(REAL_DB)[:16]))
+    biz1, secs1, _t1 = B.real_snapshot()
+    changed = set()
+    for _a, _b in zip(secs0, secs1):
+        changed.update(k for k in _a if _a[k] != _b.get(k))
+    step('§K8#2 真实库业务数据未变、字节变化只限行情两列（8765 属主 PID=%s，外部刷新属预期）'
+         % B.listening_pid(8765), biz1 == biz0 and changed <= B.QUOTE_COLS,
+         'changed=%s' % sorted(changed))
 
     print('\n' + '=' * 78)
     print('结果：%d PASS / %d FAIL' % (B.PASS, B.FAIL))

@@ -29,6 +29,10 @@
    写新读数请用 `count_values()` 并让 **count 命令独占批次** ——
    count 与 `get text` 混在同一批次时，文本里的纯数字行会污染读数。
    （本轮边界检查正是踩此坑：4 条断言假红，而文本证据全 PASS。）
+8. **§6 隔离性不能用 sha256 判**（2026-09-16 修正）：8765 上用户的实例在跑时，
+   60 秒轮询会改写 securities 的两列行情 —— 真实库的字节**必然**变化，此时
+   「逐字节未变」是**错的**不变式（会假红）。改为「业务数据不变 + 字节变化只限行情两列」，
+   并用 `listening_pid(8765)` 记录写者身份。修正前脚本报了 36/2，两条红全是这个原因。
 """
 import hashlib
 import json
@@ -36,7 +40,9 @@ import os
 import re
 import subprocess
 import sys
+import shutil
 import sqlite3
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -45,7 +51,9 @@ URL = BASE + '/#/home'
 HERE = os.path.dirname(os.path.abspath(__file__))
 SANDBOX_DB = os.path.join(HERE, 'sandbox_arch', 'data', 'workbench.db')
 REAL_DB = os.path.abspath(os.path.join(HERE, '..', '..', 'data', 'workbench.db'))
-REAL_PREFIX = '4f4832aa51d00b51'   # 本次会话开始时真实库的 SHA-256 前缀
+# 行情刷新只会改这两列（server.py 的 refresh 路径）。真实库里**允许**它们变化 ——
+# 用户自己的实例在 8765 上跑着时，60 秒轮询必然改写它们。
+QUOTE_COLS = {'current_price', 'current_price_updated_at'}
 
 PASS = FAIL = 0
 
@@ -275,12 +283,64 @@ def sec_row(sid):
         c.close()
 
 
+def listening_pid(port):
+    """返回监听该端口的 PID（没有则 None）。用来判定「谁在写真实库」。"""
+    try:
+        out = subprocess.run(['netstat', '-ano'], capture_output=True, text=True,
+                             encoding='gbk', errors='replace').stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        if (':%d ' % port) in line and 'LISTENING' in line:
+            return line.split()[-1]
+    return None
+
+
+def real_snapshot():
+    """读取真实库，返回 (业务指纹, securities 原始行, 逐表行数)。
+
+    **为什么不再用 sha256 判隔离性**：8765 上用户的实例在跑时，60 秒轮询会改写
+    securities.current_price / current_price_updated_at —— 真实库的**字节**必然变化
+    （2026-09-16 实测：不碰浏览器 80 秒，14/17 只标的的行情列被外部刷新）。
+    此时隔离性的正确不变式是「**业务数据**一行不变」+「字节变化只可能来自行情两列」。
+
+    WAL 库直接打开会生成 -shm/-wal，故先复制再读，保证不碰原文件。
+    """
+    tmp = os.path.join(tempfile.gettempdir(), 'e2e_real_snap.db')
+    for p in (tmp, tmp + '-wal', tmp + '-shm'):
+        if os.path.exists(p):
+            os.remove(p)
+    shutil.copy2(REAL_DB, tmp)
+    try:
+        c = sqlite3.connect(tmp)
+        c.row_factory = sqlite3.Row
+        try:
+            secs = [dict(r) for r in c.execute(
+                'SELECT * FROM securities ORDER BY id')]
+            tally = {t: c.execute('SELECT COUNT(*) FROM %s' % t).fetchone()[0]
+                     for t in _TABLES}
+        finally:
+            c.close()
+    finally:
+        for p in (tmp, tmp + '-wal', tmp + '-shm'):
+            if os.path.exists(p):
+                os.remove(p)
+    # 业务指纹**必须排除行情两列**：纯行情刷新只写 current_price /
+    # current_price_updated_at（server.py:1405 的 UPDATE），用户实例在跑时它们必然变。
+    # 上一版把整行都算进指纹 → 用户一刷新行情 §6#1 就必红（探针自身缺陷，非产品缺陷）。
+    biz = (tuple(tuple(s[k] for k in sorted(s) if k not in QUOTE_COLS)
+                 for s in secs),
+           tuple(sorted(tally.items())))
+    return biz, secs, tally
+
+
 def main():
     print('=' * 78)
     print('真实服务 8805 + 真实 Chromium —— 标的「归档 / 恢复」端到端验证')
     print('=' * 78)
 
     real_hash0 = sha(REAL_DB)
+    biz0, secs0, tally0 = real_snapshot()
     print('\n真实库 %s\n  sha256 = %s' % (REAL_DB, real_hash0))
     print('沙箱库 %s' % SANDBOX_DB)
 
@@ -469,14 +529,28 @@ def main():
     # ---------- §6 隔离性 ----------
     print('\n§6 隔离性：端到端全程只操作副本')
     real_hash1 = sha(REAL_DB)
-    step('§6#1 真实库 data/workbench.db 逐字节未变', real_hash1 == real_hash0,
-         '%s → %s' % (real_hash0[:16], real_hash1[:16]))
-    step('§6#2 真实库仍等于本次会话开始时的内容',
-         real_hash1.startswith(REAL_PREFIX), real_hash1[:16])
+    biz1, secs1, tally1 = real_snapshot()
+    changed_cols = set()
+    changed_rows = []
+    for a, b in zip(secs0, secs1):
+        keys = sorted(k for k in a if a[k] != b.get(k))
+        if keys:
+            changed_cols.update(keys)
+            changed_rows.append((a['id'], a['code'], a['exchange'], keys))
+    owner = listening_pid(8765)
+    step('§6#1 真实库的业务数据全程未变（身份/状态/归档 + 逐表行数）',
+         biz1 == biz0, 'tally %s → %s' % (tally0, tally1))
+    step('§6#2 真实库的字节变化只限于行情两列（8765 属主 PID=%s，外部刷新属预期）'
+         % owner, changed_cols <= QUOTE_COLS, 'changed=%s' % sorted(changed_cols))
     step('§6#3 沙箱库确已演进（证明操作真的落到副本上）',
          sha(SANDBOX_DB) != real_hash1, sha(SANDBOX_DB)[:16])
-    print('        真实库 sha256 = %s' % real_hash1)
+    print('        真实库 sha256 = %s → %s' % (real_hash0[:16], real_hash1[:16]))
     print('        沙箱库 sha256 = %s' % sha(SANDBOX_DB))
+    print('        真实库变化明细（用于归因：本流程只碰副本，非行情列的变化只能来自外部实例）:')
+    for rid, code, exch, keys in changed_rows[:8]:
+        print('          id=%-3s %s.%s  %s' % (rid, code, exch, keys))
+    if not changed_rows:
+        print('          （无任何列发生变化）')
 
     print('\n' + '=' * 78)
     print('结果：%d PASS / %d FAIL' % (PASS, FAIL))

@@ -1,0 +1,29 @@
+✓ Done
+
+✓ A/H 投研交易工作台
+  http://127.0.0.1:8805/#/home
+
+✓ Done
+
+✓ Done
+
+✓ Done
+
+✓ Done
+
+✓ Done
+
+✓ Done
+
+✓ Done
+
+x:      106
+y:      4063.984375
+width:  864
+height: 106.484375
+
+✓ Done
+
+✓ Done
+
+✓ Screenshot saved to C:\Users\宜春法院\.agent-browser\tmp\screenshots\screenshot-1789523209806.png
